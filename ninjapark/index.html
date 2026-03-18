@@ -221,7 +221,7 @@ const PSPD = 56;       // player frames per cell
 const DOT_SCORE = 10;
 const PELLET_SCORE = 50;
 const GHOST_SCORE_BASE = 200;
-const POWER_DURATION = 300; // frames
+const POWER_DURATION = 900; // frames
 const GHOST_HOME_ROW = 4;
 const GHOST_HOME_COL = 6;
 
@@ -366,6 +366,8 @@ function makeGhost(index, level) {
     scatterTarget: getScatterTarget(index),
     scatter: false,
     scatterTimer: 0,
+    mouthAngle: 0.1,
+    mouthDir: 1,
   };
 }
 
@@ -467,7 +469,7 @@ function updatePlayer() {
   if (!player.alive) return;
 
   // shuriken spin
-  if (player.dir !== DIR.NONE) player.spinAngle += 0.1;
+  if (player.dir !== DIR.NONE) player.spinAngle += 0.05;
 
   // In attract mode, use AI to set inputDir
   if (state === 'attract') {
@@ -587,6 +589,11 @@ function updateGhost(g) {
 
   // Respawn: after eaten, ghost returns home
   if (g.eaten) return;
+
+  // Mouth animation
+  g.mouthAngle += 0.06 * g.mouthDir;
+  if (g.mouthAngle >= 0.28) { g.mouthAngle = 0.28; g.mouthDir = -1; }
+  if (g.mouthAngle <= 0.02) { g.mouthAngle = 0.02; g.mouthDir =  1; }
 
   // Scatter/chase timer
   g.scatterTimer++;
@@ -938,7 +945,7 @@ function drawGhost(g) {
 
   const x = g.px;
   const y = g.py;
-  const R = CELL * 0.36;
+  const R = CELL * 0.38;
 
   const scared = g.scared;
   let bodyColor;
@@ -951,109 +958,112 @@ function drawGhost(g) {
   ctx.save();
   ctx.translate(x, y);
   ctx.shadowColor = bodyColor;
-  ctx.shadowBlur = 10;
+  ctx.shadowBlur = 12;
 
-  // Round Oni head
+  if (!scared) {
+    // Horns (draw behind body)
+    ctx.fillStyle = '#ffdd44';
+    ctx.beginPath();
+    ctx.moveTo(-R * 0.42, -R * 0.72);
+    ctx.lineTo(-R * 0.58, -R * 1.42);
+    ctx.lineTo(-R * 0.15, -R * 0.72);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo( R * 0.15, -R * 0.72);
+    ctx.lineTo( R * 0.58, -R * 1.42);
+    ctx.lineTo( R * 0.42, -R * 0.72);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Ghost body: rounded top + wavy bottom
   ctx.fillStyle = bodyColor;
   ctx.beginPath();
-  ctx.arc(0, 0, R, 0, Math.PI * 2);
+  ctx.arc(0, -R * 0.1, R, Math.PI, 0, false);
+  ctx.lineTo(R, R * 0.85);
+  ctx.quadraticCurveTo( R * 0.67, R * 0.52,  R * 0.33, R * 0.85);
+  ctx.quadraticCurveTo( R * 0.00, R * 0.52, -R * 0.33, R * 0.85);
+  ctx.quadraticCurveTo(-R * 0.67, R * 0.52, -R,        R * 0.85);
+  ctx.closePath();
   ctx.fill();
   ctx.shadowBlur = 0;
 
   if (!scared) {
-    // Horns (yellow)
-    ctx.fillStyle = '#ffdd44';
-    ctx.beginPath();
-    ctx.moveTo(-R * 0.45, -R * 0.72);
-    ctx.lineTo(-R * 0.63, -R * 1.38);
-    ctx.lineTo(-R * 0.17, -R * 0.72);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo( R * 0.17, -R * 0.72);
-    ctx.lineTo( R * 0.63, -R * 1.38);
-    ctx.lineTo( R * 0.45, -R * 0.72);
-    ctx.closePath();
-    ctx.fill();
-
     // White eyes
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.ellipse(-R * 0.3, -R * 0.1, R * 0.2, R * 0.24, 0, 0, Math.PI * 2);
+    ctx.ellipse(-R * 0.3, -R * 0.15, R * 0.21, R * 0.27, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse( R * 0.3, -R * 0.1, R * 0.2, R * 0.24, 0, 0, Math.PI * 2);
+    ctx.ellipse( R * 0.3, -R * 0.15, R * 0.21, R * 0.27, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Pupils — follow movement direction
-    const pDx = g.dir.dc * R * 0.07;
-    const pDy = g.dir.dr * R * 0.07;
-    ctx.fillStyle = '#111';
+    const pDx = g.dir.dc * R * 0.08;
+    const pDy = g.dir.dr * R * 0.08;
+    ctx.fillStyle = '#003399';
     ctx.beginPath();
-    ctx.arc(-R * 0.3 + pDx, -R * 0.1 + pDy, R * 0.1, 0, Math.PI * 2);
+    ctx.arc(-R * 0.3 + pDx, -R * 0.15 + pDy, R * 0.11, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc( R * 0.3 + pDx, -R * 0.1 + pDy, R * 0.1, 0, Math.PI * 2);
+    ctx.arc( R * 0.3 + pDx, -R * 0.15 + pDy, R * 0.11, 0, Math.PI * 2);
     ctx.fill();
 
     // Angry eyebrows
-    ctx.strokeStyle = '#220000';
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(-R * 0.52, -R * 0.38);
-    ctx.lineTo(-R * 0.1,  -R * 0.26);
+    ctx.moveTo(-R * 0.52, -R * 0.44);
+    ctx.lineTo(-R * 0.1,  -R * 0.32);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo( R * 0.52, -R * 0.38);
-    ctx.lineTo( R * 0.1,  -R * 0.26);
+    ctx.moveTo( R * 0.52, -R * 0.44);
+    ctx.lineTo( R * 0.1,  -R * 0.32);
     ctx.stroke();
 
-    // Forehead stripe (headband)
-    ctx.fillStyle = 'rgba(0,0,0,0.38)';
-    ctx.fillRect(-R * 0.78, -R * 0.54, R * 1.56, R * 0.24);
-    ctx.fillStyle = bodyColor;
-    ctx.globalAlpha = 0.55;
-    ctx.fillRect(-R * 0.78, -R * 0.54, R * 1.56, R * 0.12);
-    ctx.globalAlpha = 1;
-
-    // Mouth
+    // Animated mouth (open/close)
+    const ma = g.mouthAngle;
     ctx.fillStyle = '#220000';
     ctx.beginPath();
-    ctx.arc(0, R * 0.3, R * 0.3, 0.15, Math.PI - 0.15);
+    ctx.moveTo(0, R * 0.38);
+    ctx.arc(0, R * 0.38, R * 0.28, Math.PI + ma, -ma, false);
+    ctx.closePath();
     ctx.fill();
 
     // Fangs
-    ctx.fillStyle = '#fff';
+    const mTop = R * 0.38 - R * 0.28 * Math.sin(ma);
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.moveTo(-R * 0.2,  R * 0.28);
-    ctx.lineTo(-R * 0.08, R * 0.54);
-    ctx.lineTo( R * 0.04, R * 0.28);
+    ctx.moveTo(-R * 0.14, mTop);
+    ctx.lineTo(-R * 0.05, R * 0.60);
+    ctx.lineTo( R * 0.04, mTop);
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo( R * 0.04, R * 0.28);
-    ctx.lineTo( R * 0.16, R * 0.54);
-    ctx.lineTo( R * 0.28, R * 0.28);
+    ctx.moveTo( R * 0.06, mTop);
+    ctx.lineTo( R * 0.15, R * 0.60);
+    ctx.lineTo( R * 0.24, mTop);
     ctx.fill();
 
   } else {
     // Scared face
     ctx.fillStyle = '#aaaaff';
     ctx.beginPath();
-    ctx.arc(-R * 0.3, -R * 0.1, R * 0.1, 0, Math.PI * 2);
+    ctx.arc(-R * 0.3, -R * 0.15, R * 0.1, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc( R * 0.3, -R * 0.1, R * 0.1, 0, Math.PI * 2);
+    ctx.arc( R * 0.3, -R * 0.15, R * 0.1, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#aaaaff';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(-R * 0.45, R * 0.25);
-    ctx.lineTo(-R * 0.22, R * 0.1);
-    ctx.lineTo(0,          R * 0.25);
-    ctx.lineTo( R * 0.22,  R * 0.1);
-    ctx.lineTo( R * 0.45,  R * 0.25);
+    ctx.moveTo(-R * 0.45, R * 0.3);
+    ctx.lineTo(-R * 0.22, R * 0.14);
+    ctx.lineTo( 0,         R * 0.3);
+    ctx.lineTo( R * 0.22,  R * 0.14);
+    ctx.lineTo( R * 0.45,  R * 0.3);
     ctx.stroke();
   }
 
