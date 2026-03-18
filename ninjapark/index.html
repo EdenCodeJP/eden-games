@@ -168,9 +168,11 @@
 
   .ninja-icon {
     display: inline-block;
+    font-size: 56px;
     animation: ninjaBounce 1.4s ease-in-out infinite;
     filter: drop-shadow(0 0 10px rgba(255,180,220,0.9));
     cursor: default;
+    user-select: none;
   }
   @keyframes ninjaBounce {
     0%,100% { transform: translateY(0) rotate(-6deg) scale(1); }
@@ -182,10 +184,10 @@
 <body>
 <div class="page-wrap">
   <div class="title-block">
-    <div style="display:flex; align-items:center; justify-content:center; gap:16px;">
-      <canvas id="mascotL" class="ninja-icon" width="72" height="92"></canvas>
+    <div style="display:flex; align-items:center; justify-content:center; gap:12px;">
+      <span class="ninja-icon">🥷‍♀️</span>
       <div class="game-title">SHINOBI MAZE</div>
-      <canvas id="mascotR" class="ninja-icon" width="72" height="92" style="animation-delay:0.6s;"></canvas>
+      <span class="ninja-icon" style="animation-delay:0.6s;">🥷‍♀️</span>
     </div>
     <div class="subtitle">★ EDEN CODE ARCADE ★</div>
   </div>
@@ -1350,189 +1352,6 @@ loop();
 
 })();
 
-// ─── Mascot character ──────────────────────────────────────────────────────────
-(function() {
-  function drawMascot(id) {
-    const cv = document.getElementById(id);
-    if (!cv) return;
-    const c = cv.getContext('2d');
-    const W = cv.width, H = cv.height;
-    const cx = W / 2;
-    const R  = W * 0.37;   // head radius
-    const hy = H * 0.43;   // head center Y
-
-    c.clearRect(0, 0, W, H);
-
-    // ── Hair back layer ──
-    c.fillStyle = '#1a1020';
-    // Left side hair
-    c.beginPath();
-    c.ellipse(cx - R * 0.78, hy + R * 0.1, R * 0.28, R * 0.65, -0.3, 0, Math.PI * 2);
-    c.fill();
-    // Right side hair
-    c.beginPath();
-    c.ellipse(cx + R * 0.78, hy + R * 0.1, R * 0.28, R * 0.65, 0.3, 0, Math.PI * 2);
-    c.fill();
-    // Top hair mass
-    c.beginPath();
-    c.ellipse(cx, hy - R * 0.72, R * 0.88, R * 0.45, 0, 0, Math.PI * 2);
-    c.fill();
-
-    // ── Twin buns (odango) ──
-    c.fillStyle = '#1a1020';
-    c.beginPath();
-    c.arc(cx - R * 0.52, hy - R * 1.08, R * 0.3, 0, Math.PI * 2);
-    c.fill();
-    c.beginPath();
-    c.arc(cx + R * 0.52, hy - R * 1.08, R * 0.3, 0, Math.PI * 2);
-    c.fill();
-    // Bun shine
-    c.fillStyle = 'rgba(255,255,255,0.15)';
-    c.beginPath();
-    c.arc(cx - R * 0.57, hy - R * 1.15, R * 0.12, 0, Math.PI * 2);
-    c.fill();
-    c.beginPath();
-    c.arc(cx + R * 0.47, hy - R * 1.15, R * 0.12, 0, Math.PI * 2);
-    c.fill();
-
-    // ── Face ──
-    const skinGrd = c.createRadialGradient(cx - R * 0.2, hy - R * 0.25, 0, cx, hy, R);
-    skinGrd.addColorStop(0, '#ffe8d5');
-    skinGrd.addColorStop(1, '#ffc9a0');
-    c.fillStyle = skinGrd;
-    c.beginPath();
-    c.arc(cx, hy, R, 0, Math.PI * 2);
-    c.fill();
-
-    // ── Hair front (top of head) ──
-    c.fillStyle = '#1a1020';
-    c.beginPath();
-    c.arc(cx, hy, R, Math.PI * 1.08, Math.PI * 1.92);
-    c.fill();
-    // Fringe / bangs
-    c.beginPath();
-    c.ellipse(cx - R * 0.4, hy - R * 0.72, R * 0.32, R * 0.26, 0.4, 0, Math.PI * 2);
-    c.fill();
-    c.beginPath();
-    c.ellipse(cx + R * 0.4, hy - R * 0.72, R * 0.32, R * 0.26, -0.4, 0, Math.PI * 2);
-    c.fill();
-    c.beginPath();
-    c.ellipse(cx, hy - R * 0.8, R * 0.3, R * 0.22, 0, 0, Math.PI * 2);
-    c.fill();
-
-    // ── Cheeks ──
-    c.fillStyle = 'rgba(255,130,140,0.42)';
-    c.beginPath();
-    c.ellipse(cx - R * 0.58, hy + R * 0.18, R * 0.24, R * 0.14, 0, 0, Math.PI * 2);
-    c.fill();
-    c.beginPath();
-    c.ellipse(cx + R * 0.58, hy + R * 0.18, R * 0.24, R * 0.14, 0, 0, Math.PI * 2);
-    c.fill();
-
-    // ── Eyes (big, anime style) ──
-    const eyeY = hy - R * 0.08;
-    const eyeOffX = R * 0.33;
-    // White
-    c.fillStyle = '#fff';
-    c.beginPath();
-    c.ellipse(cx - eyeOffX, eyeY, R * 0.26, R * 0.32, 0, 0, Math.PI * 2);
-    c.fill();
-    c.beginPath();
-    c.ellipse(cx + eyeOffX, eyeY, R * 0.26, R * 0.32, 0, 0, Math.PI * 2);
-    c.fill();
-    // Iris (warm brown)
-    c.fillStyle = '#5c3a1e';
-    c.beginPath();
-    c.ellipse(cx - eyeOffX, eyeY + R * 0.02, R * 0.19, R * 0.25, 0, 0, Math.PI * 2);
-    c.fill();
-    c.beginPath();
-    c.ellipse(cx + eyeOffX, eyeY + R * 0.02, R * 0.19, R * 0.25, 0, 0, Math.PI * 2);
-    c.fill();
-    // Pupil
-    c.fillStyle = '#111';
-    c.beginPath();
-    c.arc(cx - eyeOffX, eyeY + R * 0.04, R * 0.12, 0, Math.PI * 2);
-    c.fill();
-    c.beginPath();
-    c.arc(cx + eyeOffX, eyeY + R * 0.04, R * 0.12, 0, Math.PI * 2);
-    c.fill();
-    // Main highlight
-    c.fillStyle = 'rgba(255,255,255,0.95)';
-    c.beginPath();
-    c.arc(cx - eyeOffX - R * 0.07, eyeY - R * 0.12, R * 0.08, 0, Math.PI * 2);
-    c.fill();
-    c.beginPath();
-    c.arc(cx + eyeOffX - R * 0.07, eyeY - R * 0.12, R * 0.08, 0, Math.PI * 2);
-    c.fill();
-    // Small secondary highlight
-    c.fillStyle = 'rgba(255,255,255,0.6)';
-    c.beginPath();
-    c.arc(cx - eyeOffX + R * 0.1, eyeY + R * 0.1, R * 0.04, 0, Math.PI * 2);
-    c.fill();
-    c.beginPath();
-    c.arc(cx + eyeOffX + R * 0.1, eyeY + R * 0.1, R * 0.04, 0, Math.PI * 2);
-    c.fill();
-    // Eyelashes (top)
-    c.strokeStyle = '#1a1020';
-    c.lineWidth = 1.8;
-    c.lineCap = 'round';
-    [-1, 1].forEach(side => {
-      const ex = cx + side * eyeOffX;
-      for (let i = 0; i < 4; i++) {
-        const lx = ex - R * 0.22 + i * R * 0.14;
-        c.beginPath();
-        c.moveTo(lx, eyeY - R * 0.3);
-        c.lineTo(lx + side * R * 0.03, eyeY - R * 0.42);
-        c.stroke();
-      }
-    });
-
-    // ── Ninja mask (lower half of face) ──
-    c.fillStyle = '#0f0f1e';
-    c.beginPath();
-    c.arc(cx, hy, R * 1.01, 0.08, Math.PI - 0.08);
-    c.lineTo(cx - R, hy);
-    c.closePath();
-    c.fill();
-
-    // ── Red headband ──
-    c.fillStyle = '#cc1122';
-    c.beginPath();
-    c.rect(cx - R * 0.92, hy - R * 0.5, R * 1.84, R * 0.22);
-    c.fill();
-    // Headband knot (left side)
-    c.fillStyle = '#ff3344';
-    c.beginPath();
-    c.arc(cx - R * 0.85, hy - R * 0.39, R * 0.13, 0, Math.PI * 2);
-    c.fill();
-    // Knot tails
-    c.fillStyle = '#cc1122';
-    c.beginPath();
-    c.moveTo(cx - R * 0.85, hy - R * 0.28);
-    c.lineTo(cx - R * 1.05, hy + R * 0.1);
-    c.lineTo(cx - R * 0.75, hy - R * 0.28);
-    c.fill();
-
-    // ── Body (small, ninja outfit) ──
-    const bodyTop = hy + R + 2;
-    c.fillStyle = '#0f0f1e';
-    c.beginPath();
-    c.roundRect(cx - R * 0.52, bodyTop, R * 1.04, R * 0.72, [4]);
-    c.fill();
-    // White collar V
-    c.strokeStyle = '#ddd';
-    c.lineWidth = 1.5;
-    c.lineCap = 'round';
-    c.beginPath();
-    c.moveTo(cx - R * 0.18, bodyTop);
-    c.lineTo(cx, bodyTop + R * 0.28);
-    c.lineTo(cx + R * 0.18, bodyTop);
-    c.stroke();
-  }
-
-  drawMascot('mascotL');
-  drawMascot('mascotR');
-})();
 </script>
 </body>
 </html>
