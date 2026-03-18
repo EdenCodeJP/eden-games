@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EdenGames // ゲーム一覧</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Noto+Sans+JP:wght@300;400;700&display=swap');
+
+  :root {
+    --bg: #0a0e14;
+    --surface: #111820;
+    --border: #1e2d3d;
+    --accent: #00d4aa;
+    --accent2: #ff6b35;
+    --accent3: #7c6aff;
+    --text: #c9d1d9;
+    --text-dim: #556070;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Noto Sans JP', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-weight: 300;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,170,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,170,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 60px 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ヘッダー */
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 32px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 3px;
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  h1 span { color: var(--accent); }
+
+  /* 検索 */
+  .search-wrap {
+    position: relative;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 14px;
+    pointer-events: none;
+  }
+
+  #search {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 16px 10px 40px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    width: 280px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  #search:focus { border-color: var(--accent); }
+  #search::placeholder { color: var(--text-dim); }
+
+  /* タグフィルター */
+  .tags {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+  }
+
+  .tag-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 4px 14px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tag-btn:hover, .tag-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,212,170,0.05);
+  }
+
+  /* カウント */
+  .count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+  }
+
+  .count span { color: var(--accent); }
+
+  /* グリッド */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  /* カード */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    text-decoration: none;
+    display: block;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .card:hover {
+    border-color: rgba(0,212,170,0.4);
+    transform: translateY(-2px);
+  }
+
+  .card:hover::before { opacity: 1; }
+
+  .card-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .card-date {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 2px;
+  }
+
+  .card-status {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 2px;
+  }
+
+  .card-status.live {
+    background: rgba(0,212,170,0.1);
+    border: 1px solid rgba(0,212,170,0.3);
+    color: var(--accent);
+  }
+
+  .card-status.wip {
+    background: rgba(255,107,53,0.1);
+    border: 1px solid rgba(255,107,53,0.3);
+    color: var(--accent2);
+  }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.4;
+    margin-bottom: 10px;
+  }
+
+  .card-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    margin-bottom: 14px;
+  }
+
+  .card-url {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    letter-spacing: 0.5px;
+  }
+
+  .card-url span { color: var(--accent); }
+
+  .card-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .card-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    background: rgba(0,212,170,0.08);
+    border: 1px solid rgba(0,212,170,0.2);
+    color: var(--accent);
+  }
+
+  .card-tag.orange {
+    background: rgba(255,107,53,0.08);
+    border-color: rgba(255,107,53,0.2);
+    color: var(--accent2);
+  }
+
+  .card-tag.purple {
+    background: rgba(124,106,255,0.08);
+    border-color: rgba(124,106,255,0.2);
+    color: var(--accent3);
+  }
+
+  /* 空の状態 */
+  .empty {
+    text-align: center;
+    padding: 80px 0;
+    font-family: var(--mono);
+    color: var(--text-dim);
+    font-size: 13px;
+    display: none;
+  }
+
+  /* フッター */
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div>
+      <div class="logo">EDENCODE // ゲーム一覧</div>
+      <h1>EdenGames <span>Game Library</span></h1>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="search" placeholder="キーワードで検索...">
+    </div>
+  </header>
+
+  <div class="tags" id="tagFilters">
+    <button class="tag-btn active" data-tag="ALL">ALL</button>
+    <button class="tag-btn" data-tag="Action">Action</button>
+    <button class="tag-btn" data-tag="Puzzle">Puzzle</button>
+    <button class="tag-btn" data-tag="Shooter">Shooter</button>
+    <button class="tag-btn" data-tag="Arcade">Arcade</button>
+  </div>
+
+  <div class="count">表示中: <span id="countNum">0</span> 件</div>
+
+  <div class="grid" id="grid">
+
+    <a class="card" href="invaderbreaker/index.html"
+       data-tags="Action Shooter Arcade"
+       data-title="InvaderBreaker"
+       data-desc="ブロック崩し×スペースインベーダーのオリジナルゲーム。効果音・UFO・EdenCodeクレジット搭載。">
+      <div class="card-meta">
+        <span class="card-date">2026.03.18</span>
+        <span class="card-status live">LIVE</span>
+      </div>
+      <div class="card-title">InvaderBreaker</div>
+      <div class="card-desc">ブロック崩し×スペースインベーダーのオリジナルゲーム。効果音・UFO・EdenCodeクレジット搭載。</div>
+      <div class="card-url">▲ <span>invaderbreaker.vercel.app</span></div>
+      <div class="card-tags">
+        <span class="card-tag">Action</span>
+        <span class="card-tag">Shooter</span>
+        <span class="card-tag orange">Arcade</span>
+      </div>
+    </a>
+
+    <!-- 新しいゲームはここに追加
+    <a class="card" href="ゲーム名/index.html"
+       data-tags="タグ1 タグ2"
+       data-title="ゲームタイトル"
+       data-desc="説明文">
+      <div class="card-meta">
+        <span class="card-date">YYYY.MM.DD</span>
+        <span class="card-status live">LIVE</span>
+      </div>
+      <div class="card-title">タイトル</div>
+      <div class="card-desc">説明文</div>
+      <div class="card-url">▲ <span>xxx.vercel.app</span></div>
+      <div class="card-tags">
+        <span class="card-tag">タグ</span>
+      </div>
+    </a>
+    -->
+
+  </div>
+
+  <div class="empty" id="empty">該当するゲームが見つかりません</div>
+
+  <footer>
+    <span style="color:var(--accent)">EdenCode</span> — のっぱらから楽園を作る神様の真似事
+    <span id="footerCount"></span>
+  </footer>
+
+</div>
+
+<script>
+  const cards = Array.from(document.querySelectorAll('.card'));
+  const search = document.getElementById('search');
+  const tagBtns = document.querySelectorAll('.tag-btn');
+  const countNum = document.getElementById('countNum');
+  const empty = document.getElementById('empty');
+  const footerCount = document.getElementById('footerCount');
+
+  let activeTag = 'ALL';
+
+  function update() {
+    const q = search.value.toLowerCase();
+    let visible = 0;
+
+    cards.forEach(card => {
+      const title = (card.dataset.title || '').toLowerCase();
+      const desc = (card.dataset.desc || '').toLowerCase();
+      const tags = (card.dataset.tags || '').toLowerCase();
+
+      const matchSearch = !q || title.includes(q) || desc.includes(q) || tags.includes(q);
+      const matchTag = activeTag === 'ALL' || tags.includes(activeTag.toLowerCase());
+
+      if (matchSearch && matchTag) {
+        card.style.display = 'block';
+        visible++;
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    countNum.textContent = visible;
+    empty.style.display = visible === 0 ? 'block' : 'none';
+    footerCount.textContent = `TOTAL: ${cards.length} games`;
+  }
+
+  search.addEventListener('input', update);
+
+  tagBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tagBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeTag = btn.dataset.tag;
+      update();
+    });
+  });
+
+  update();
+</script>
+</body>
+</html>
