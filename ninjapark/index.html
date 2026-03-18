@@ -476,10 +476,12 @@ function updatePlayer() {
 
   player.moveTimer++;
   if (player.moveTimer < PSPD) {
-    // interpolate position
-    const prog = player.moveTimer / PSPD;
-    player.px = (player.col + player.dir.dc * prog) * CELL + CELL / 2;
-    player.py = (player.row + player.dir.dr * prog) * CELL + CELL / 2;
+    // 移動先が壁でない場合のみ補間（壁めり込み防止）
+    if (player.dir !== DIR.NONE && canMove(player.row, player.col, player.dir)) {
+      const prog = player.moveTimer / PSPD;
+      player.px = (player.col + player.dir.dc * prog) * CELL + CELL / 2;
+      player.py = (player.row + player.dir.dr * prog) * CELL + CELL / 2;
+    }
     return;
   }
 
