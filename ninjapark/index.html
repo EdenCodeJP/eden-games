@@ -217,7 +217,7 @@ const COLS = 14;
 const ROWS = 14;
 const W = CELL * COLS; // 560
 const H = CELL * ROWS; // 560
-const PSPD = 28;       // player frames per cell
+const PSPD = 56;       // player frames per cell
 const DOT_SCORE = 10;
 const PELLET_SCORE = 50;
 const GHOST_SCORE_BASE = 200;
@@ -320,7 +320,7 @@ function initMaze() {
 }
 
 function ghostSpeed(lvl) {
-  return Math.max(24, 44 - (lvl - 1) * 4);
+  return Math.max(48, 88 - (lvl - 1) * 8);
 }
 
 function makePlayer(row, col) {
