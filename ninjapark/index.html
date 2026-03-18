@@ -533,28 +533,7 @@ function updatePlayer() {
   // Completed move
   player.moveTimer = 0;
 
-  // ホールド式: キーを離していたら方向をリセット（returnしない）
-  if (state !== 'attract' && inputDir === DIR.NONE) {
-    player.dir = DIR.NONE;
-    player.nextDir = DIR.NONE;
-  }
-
-  // Apply nextDir if queued
-  if (player.nextDir !== DIR.NONE && canMove(player.row, player.col, player.nextDir)) {
-    player.dir = player.nextDir;
-    player.nextDir = DIR.NONE;
-  }
-
-  // Try to queue inputDir
-  if (inputDir !== DIR.NONE) {
-    if (canMove(player.row, player.col, inputDir)) {
-      player.dir = inputDir;
-    } else {
-      player.nextDir = inputDir;
-    }
-  }
-
-  // Move in current direction
+  // ① 今の移動を先に完了させる（キーを離していても今のマスまでは進む）
   if (player.dir !== DIR.NONE && canMove(player.row, player.col, player.dir)) {
     player.row += player.dir.dr;
     player.col += player.dir.dc;
@@ -562,9 +541,29 @@ function updatePlayer() {
     player.dir = DIR.NONE;
   }
 
-  // Snap position
+  // ② スナップ（移動後の正確な位置に固定）
   player.px = player.col * CELL + CELL / 2;
   player.py = player.row * CELL + CELL / 2;
+
+  // ③ ホールド式: キーを離していたらここで停止（移動済みなので戻らない）
+  if (state !== 'attract' && inputDir === DIR.NONE) {
+    player.dir = DIR.NONE;
+    player.nextDir = DIR.NONE;
+    // ここで return せず、後続のdot取得処理へ
+  } else {
+    // ④ 次の方向を決定（まだキーを押している場合のみ）
+    if (player.nextDir !== DIR.NONE && canMove(player.row, player.col, player.nextDir)) {
+      player.dir = player.nextDir;
+      player.nextDir = DIR.NONE;
+    }
+    if (inputDir !== DIR.NONE) {
+      if (canMove(player.row, player.col, inputDir)) {
+        player.dir = inputDir;
+      } else {
+        player.nextDir = inputDir;
+      }
+    }
+  }
 
   // Eat dot / pellet
   const cell = maze[player.row][player.col];
