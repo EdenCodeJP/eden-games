@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NINJA PARK - 忍者テーマパーク | EdenCode Arcade</title>
+<title>SHINOBI MAZE | EdenCode Arcade</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 
@@ -170,7 +170,7 @@
 <body>
 <div class="page-wrap">
   <div class="title-block">
-    <div class="game-title">🥷 NINJA PARK 🥷</div>
+    <div class="game-title">🥷 SHINOBI MAZE 🥷</div>
     <div class="subtitle">★ EDEN CODE ARCADE ★</div>
   </div>
 
@@ -196,7 +196,7 @@
 <script>
 /**
  * ========================================
- *  NINJA PARK
+ *  SHINOBI MAZE
  *  © 2026 EdenCode (edencode.jp)
  * ----------------------------------------
  *  Author  : Edeny / EdenCode
@@ -277,29 +277,36 @@ const DIRS = [DIR.UP, DIR.DOWN, DIR.LEFT, DIR.RIGHT];
 
 // ─── Input ────────────────────────────────────────────────────────────────────
 let inputDir = DIR.NONE;
-let keyPressed = false;
+
+// ホールド式: 押している間だけ進む
+const heldKeys = new Set();
 
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space') {
-    keyPressed = true;
     if (state === 'attract' || state === 'gameover') startGame();
     return;
   }
-  let d = null;
-  if (e.code === 'ArrowUp'    || e.code === 'KeyW') d = DIR.UP;
-  if (e.code === 'ArrowDown'  || e.code === 'KeyS') d = DIR.DOWN;
-  if (e.code === 'ArrowLeft'  || e.code === 'KeyA') d = DIR.LEFT;
-  if (e.code === 'ArrowRight' || e.code === 'KeyD') d = DIR.RIGHT;
-  if (d) {
-    inputDir = d;
-    keyPressed = true;
-    if (state === 'attract' || state === 'gameover') startGame();
+  heldKeys.add(e.code);
+  if (state === 'attract' || state === 'gameover') {
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(e.code)) startGame();
   }
-  // Prevent scrolling with arrows
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
     e.preventDefault();
   }
 });
+
+document.addEventListener('keyup', (e) => {
+  heldKeys.delete(e.code);
+});
+
+// 毎フレーム呼ばれ、現在押しているキーから方向を決定
+function pollKeys() {
+  if (heldKeys.has('ArrowUp')    || heldKeys.has('KeyW')) { inputDir = DIR.UP;    return; }
+  if (heldKeys.has('ArrowDown')  || heldKeys.has('KeyS')) { inputDir = DIR.DOWN;  return; }
+  if (heldKeys.has('ArrowLeft')  || heldKeys.has('KeyA')) { inputDir = DIR.LEFT;  return; }
+  if (heldKeys.has('ArrowRight') || heldKeys.has('KeyD')) { inputDir = DIR.RIGHT; return; }
+  inputDir = DIR.NONE;
+}
 
 canvas.addEventListener('click', () => {
   if (state === 'attract' || state === 'gameover') startGame();
@@ -323,10 +330,12 @@ function pollGamepad() {
   const dLeft  = gp.buttons[14]?.pressed || axisX < -STICK_DEAD;
   const dRight = gp.buttons[15]?.pressed || axisX >  STICK_DEAD;
 
+  // コントローラーの方向（押している間だけ）
   if      (dUp)    inputDir = DIR.UP;
   else if (dDown)  inputDir = DIR.DOWN;
   else if (dLeft)  inputDir = DIR.LEFT;
   else if (dRight) inputDir = DIR.RIGHT;
+  else if (heldKeys.size === 0) inputDir = DIR.NONE; // キーもコントローラーも離したら停止
 
   // Aボタン（Xbox: 0 / PS: Cross: 0）でスタート
   const aBtn = gp.buttons[0]?.pressed;
@@ -537,7 +546,6 @@ function updatePlayer() {
     } else {
       player.nextDir = inputDir;
     }
-    if (state !== 'attract') inputDir = DIR.NONE;
   }
 
   // Move in current direction
@@ -1295,6 +1303,7 @@ function draw() {
 }
 
 function loop() {
+  pollKeys();
   pollGamepad();
   update();
   draw();
