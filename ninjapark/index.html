@@ -592,8 +592,8 @@ function updateGhost(g) {
 
   // Mouth animation
   g.mouthAngle += 0.06 * g.mouthDir;
-  if (g.mouthAngle >= 0.28) { g.mouthAngle = 0.28; g.mouthDir = -1; }
-  if (g.mouthAngle <= 0.02) { g.mouthAngle = 0.02; g.mouthDir =  1; }
+  if (g.mouthAngle >= 1.0) { g.mouthAngle = 1.0; g.mouthDir = -1; }
+  if (g.mouthAngle <= 0.0) { g.mouthAngle = 0.0; g.mouthDir =  1; }
 
   // Scatter/chase timer
   g.scatterTimer++;
@@ -960,22 +960,20 @@ function drawGhost(g) {
   ctx.shadowColor = bodyColor;
   ctx.shadowBlur = 12;
 
-  if (!scared) {
-    // Horns (draw behind body)
-    ctx.fillStyle = '#ffdd44';
-    ctx.beginPath();
-    ctx.moveTo(-R * 0.42, -R * 0.72);
-    ctx.lineTo(-R * 0.58, -R * 1.42);
-    ctx.lineTo(-R * 0.15, -R * 0.72);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo( R * 0.15, -R * 0.72);
-    ctx.lineTo( R * 0.58, -R * 1.42);
-    ctx.lineTo( R * 0.42, -R * 0.72);
-    ctx.closePath();
-    ctx.fill();
-  }
+  // Horns (always visible, even when scared)
+  ctx.fillStyle = scared ? '#6688ff' : '#ffdd44';
+  ctx.beginPath();
+  ctx.moveTo(-R * 0.42, -R * 0.72);
+  ctx.lineTo(-R * 0.58, -R * 1.42);
+  ctx.lineTo(-R * 0.15, -R * 0.72);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo( R * 0.15, -R * 0.72);
+  ctx.lineTo( R * 0.58, -R * 1.42);
+  ctx.lineTo( R * 0.42, -R * 0.72);
+  ctx.closePath();
+  ctx.fill();
 
   // Ghost body: rounded top + wavy bottom
   ctx.fillStyle = bodyColor;
@@ -1023,27 +1021,25 @@ function drawGhost(g) {
     ctx.lineTo( R * 0.1,  -R * 0.32);
     ctx.stroke();
 
-    // Animated mouth (open/close)
-    const ma = g.mouthAngle;
+    // Animated mouth (open/close) — 楕円で明確に開閉
+    const ma = g.mouthAngle; // 0.0(閉) 〜 1.0(全開)
+    const mouthH = R * 0.22 * ma; // 高さがmaに比例して変化
     ctx.fillStyle = '#220000';
     ctx.beginPath();
-    ctx.moveTo(0, R * 0.38);
-    ctx.arc(0, R * 0.38, R * 0.28, Math.PI + ma, -ma, false);
-    ctx.closePath();
+    ctx.ellipse(0, R * 0.38, R * 0.26, Math.max(0.5, mouthH), 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Fangs
-    const mTop = R * 0.38 - R * 0.28 * Math.sin(ma);
+    // Fangs (常に見える)
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.moveTo(-R * 0.14, mTop);
-    ctx.lineTo(-R * 0.05, R * 0.60);
-    ctx.lineTo( R * 0.04, mTop);
+    ctx.moveTo(-R * 0.14, R * 0.28);
+    ctx.lineTo(-R * 0.05, R * 0.28 + R * 0.22 * (0.3 + ma * 0.7));
+    ctx.lineTo( R * 0.04, R * 0.28);
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo( R * 0.06, mTop);
-    ctx.lineTo( R * 0.15, R * 0.60);
-    ctx.lineTo( R * 0.24, mTop);
+    ctx.moveTo( R * 0.06, R * 0.28);
+    ctx.lineTo( R * 0.15, R * 0.28 + R * 0.22 * (0.3 + ma * 0.7));
+    ctx.lineTo( R * 0.24, R * 0.28);
     ctx.fill();
 
   } else {
