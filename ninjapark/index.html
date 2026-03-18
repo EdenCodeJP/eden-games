@@ -533,11 +533,10 @@ function updatePlayer() {
   // Completed move
   player.moveTimer = 0;
 
-  // ホールド式: キーを離していたら停止
+  // ホールド式: キーを離していたら方向をリセット（returnしない）
   if (state !== 'attract' && inputDir === DIR.NONE) {
     player.dir = DIR.NONE;
     player.nextDir = DIR.NONE;
-    return;
   }
 
   // Apply nextDir if queued
