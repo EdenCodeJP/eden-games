@@ -533,6 +533,13 @@ function updatePlayer() {
   // Completed move
   player.moveTimer = 0;
 
+  // ホールド式: キーを離していたら停止
+  if (state !== 'attract' && inputDir === DIR.NONE) {
+    player.dir = DIR.NONE;
+    player.nextDir = DIR.NONE;
+    return;
+  }
+
   // Apply nextDir if queued
   if (player.nextDir !== DIR.NONE && canMove(player.row, player.col, player.nextDir)) {
     player.dir = player.nextDir;
