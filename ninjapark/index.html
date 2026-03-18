@@ -165,12 +165,29 @@
     text-decoration: none;
   }
   .credit a:hover { color: #00cfff; }
+
+  .ninja-icon {
+    display: inline-block;
+    font-size: 48px;
+    animation: ninjaBounce 1.2s ease-in-out infinite;
+    filter: drop-shadow(0 0 8px rgba(255,200,0,0.8));
+    cursor: default;
+    user-select: none;
+  }
+  .ninja-icon:last-child {
+    animation-delay: 0.6s;
+  }
+  @keyframes ninjaBounce {
+    0%,100% { transform: translateY(0) rotate(-8deg) scale(1); }
+    30%      { transform: translateY(-10px) rotate(8deg) scale(1.15); }
+    60%      { transform: translateY(-4px) rotate(-4deg) scale(1.05); }
+  }
 </style>
 </head>
 <body>
 <div class="page-wrap">
   <div class="title-block">
-    <div class="game-title">🥷 SHINOBI MAZE 🥷</div>
+    <div class="game-title"><span class="ninja-icon">🥷</span> SHINOBI MAZE <span class="ninja-icon">🥷</span></div>
     <div class="subtitle">★ EDEN CODE ARCADE ★</div>
   </div>
 
@@ -301,6 +318,7 @@ document.addEventListener('keyup', (e) => {
 
 // 毎フレーム呼ばれ、現在押しているキーから方向を決定
 function pollKeys() {
+  if (state === 'attract') return; // アトラクトモード中はAIに任せる
   if (heldKeys.has('ArrowUp')    || heldKeys.has('KeyW')) { inputDir = DIR.UP;    return; }
   if (heldKeys.has('ArrowDown')  || heldKeys.has('KeyS')) { inputDir = DIR.DOWN;  return; }
   if (heldKeys.has('ArrowLeft')  || heldKeys.has('KeyA')) { inputDir = DIR.LEFT;  return; }
@@ -330,12 +348,14 @@ function pollGamepad() {
   const dLeft  = gp.buttons[14]?.pressed || axisX < -STICK_DEAD;
   const dRight = gp.buttons[15]?.pressed || axisX >  STICK_DEAD;
 
-  // コントローラーの方向（押している間だけ）
-  if      (dUp)    inputDir = DIR.UP;
-  else if (dDown)  inputDir = DIR.DOWN;
-  else if (dLeft)  inputDir = DIR.LEFT;
-  else if (dRight) inputDir = DIR.RIGHT;
-  else if (heldKeys.size === 0) inputDir = DIR.NONE; // キーもコントローラーも離したら停止
+  // コントローラーの方向（アトラクト中は無効）
+  if (state !== 'attract') {
+    if      (dUp)    inputDir = DIR.UP;
+    else if (dDown)  inputDir = DIR.DOWN;
+    else if (dLeft)  inputDir = DIR.LEFT;
+    else if (dRight) inputDir = DIR.RIGHT;
+    else if (heldKeys.size === 0) inputDir = DIR.NONE;
+  }
 
   // Aボタン（Xbox: 0 / PS: Cross: 0）でスタート
   const aBtn = gp.buttons[0]?.pressed;
@@ -1035,24 +1055,33 @@ function drawGhost(g) {
   ctx.shadowBlur = 0;
 
   if (!scared) {
-    // White eyes
+    // White eyes (大きめでかわいく)
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.ellipse(-R * 0.3, -R * 0.15, R * 0.21, R * 0.27, 0, 0, Math.PI * 2);
+    ctx.ellipse(-R * 0.3, -R * 0.12, R * 0.28, R * 0.34, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse( R * 0.3, -R * 0.15, R * 0.21, R * 0.27, 0, 0, Math.PI * 2);
+    ctx.ellipse( R * 0.3, -R * 0.12, R * 0.28, R * 0.34, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Pupils — follow movement direction
     const pDx = g.dir.dc * R * 0.08;
     const pDy = g.dir.dr * R * 0.08;
-    ctx.fillStyle = '#003399';
+    ctx.fillStyle = '#111133';
     ctx.beginPath();
-    ctx.arc(-R * 0.3 + pDx, -R * 0.15 + pDy, R * 0.11, 0, Math.PI * 2);
+    ctx.arc(-R * 0.3 + pDx, -R * 0.12 + pDy, R * 0.16, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc( R * 0.3 + pDx, -R * 0.15 + pDy, R * 0.11, 0, Math.PI * 2);
+    ctx.arc( R * 0.3 + pDx, -R * 0.12 + pDy, R * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+
+    // キラキラハイライト
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.arc(-R * 0.24 + pDx, -R * 0.2 + pDy, R * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc( R * 0.36 + pDx, -R * 0.2 + pDy, R * 0.07, 0, Math.PI * 2);
     ctx.fill();
 
     // Angry eyebrows
