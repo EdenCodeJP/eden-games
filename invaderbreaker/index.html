@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invader Breaker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+      user-select: none;
+      padding: 8px 0;
+    }
+    canvas {
+      border: 2px solid #0ff;
+      box-shadow: 0 0 40px rgba(0,255,255,0.3), 0 0 80px rgba(0,255,255,0.1);
+      cursor: none;
+    }
+    #credit {
+      margin-top: 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: rgba(0,255,255,0.6);
+      text-shadow: 0 0 8px rgba(0,255,255,0.5);
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c" width="600" height="720"></canvas>
+<div id="credit">© 2026 EdenCode (edencode.jp) — InvaderBreaker</div>
+<script>
+/**
+ * ========================================
+ *  InvaderBreaker
+ *  © 2026 EdenCode (edencode.jp)
+ * ----------------------------------------
+ *  Author  : Edeny / EdenCode
+ *  Created : 2026-03-18
+ *  URL     : invaderbreaker.vercel.app
+ * ========================================
+ *  Created with Claude Code (Anthropic)
+ *  All rights reserved.
+ * ========================================
+ */
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// ─── Audio ────────────────────────────────────────────────────────────────────
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+document.addEventListener('click',   () => audioCtx.resume(), { once: true });
+document.addEventListener('keydown', () => audioCtx.resume(), { once: true });
+
+function playWallHit() {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.connect(g); g.connect(audioCtx.destination);
+  o.type = 'square';
+  o.frequency.setValueAtTime(900, audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.06);
+  g.gain.setValueAtTime(0.18, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+  o.start(); o.stop(audioCtx.currentTime + 0.08);
+}
+function playPaddleHit() {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.connect(g); g.connect(audioCtx.destination);
+  o.type = 'sine';
+  o.frequency.setValueAtTime(440, audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(280, audioCtx.currentTime + 0.12);
+  g.gain.setValueAtTime(0.25, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.14);
+  o.start(); o.stop(audioCtx.currentTime + 0.14);
+}
+function playInvaderHit() {
+  const bufSize = audioCtx.sampleRate * 0.15;
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource(); noise.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(400, audioCtx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.15);
+  filter.Q.value = 1.2;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+  noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+  noise.start(); noise.stop(audioCtx.currentTime + 0.15);
+}
+let ufoOscNode = null;
+function startUfoHum() {
+  if (ufoOscNode) return;
+  const o = audioCtx.createOscillator(), lfo = audioCtx.createOscillator();
+  const lfoG = audioCtx.createGain(), g = audioCtx.createGain();
+  lfo.frequency.value = 8; lfoG.gain.value = 80;
+  lfo.connect(lfoG); lfoG.connect(o.frequency);
+  o.type = 'sawtooth'; o.frequency.value = 220; g.gain.value = 0.12;
+  o.connect(g); g.connect(audioCtx.destination);
+  lfo.start(); o.start();
+  ufoOscNode = { osc: o, lfo, gain: g };
+}
+function stopUfoHum() {
+  if (!ufoOscNode) return;
+  try { ufoOscNode.osc.stop(); ufoOscNode.lfo.stop(); } catch(e) {}
+  ufoOscNode = null;
+}
+function playUfoBoom() {
+  stopUfoHum();
+  const bufSize = audioCtx.sampleRate * 0.4;
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource(); noise.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(1200, audioCtx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.4);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+  noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+  const o = audioCtx.createOscillator(), g2 = audioCtx.createGain();
+  o.frequency.setValueAtTime(600, audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.35);
+  g2.gain.setValueAtTime(0.4, audioCtx.currentTime);
+  g2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+  o.connect(g2); g2.connect(audioCtx.destination);
+  noise.start(); noise.stop(audioCtx.currentTime + 0.4);
+  o.start(); o.stop(audioCtx.currentTime + 0.35);
+}
+function playBossHit() {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.connect(g); g.connect(audioCtx.destination);
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(200, audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.2);
+  g.gain.setValueAtTime(0.45, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+  o.start(); o.stop(audioCtx.currentTime + 0.2);
+}
+function playBossWarningSound() {
+  [330, 440, 550, 880].forEach((f, i) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.type = 'square'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.12, audioCtx.currentTime + i * 0.15);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i * 0.15 + 0.14);
+    o.start(audioCtx.currentTime + i * 0.15);
+    o.stop(audioCtx.currentTime + i * 0.15 + 0.14);
+  });
+}
+function playBossShoot() {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.connect(g); g.connect(audioCtx.destination);
+  o.type = 'square';
+  o.frequency.setValueAtTime(600, audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.25);
+  g.gain.setValueAtTime(0.12, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+  o.start(); o.stop(audioCtx.currentTime + 0.25);
+}
+function playBossDie() {
+  const bufSize = audioCtx.sampleRate * 1.5;
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+  const noise = audioCtx.createBufferSource(); noise.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(800, audioCtx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 1.5);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.5);
+  noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+  [600, 400, 200].forEach((f, i) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(f, audioCtx.currentTime + i * 0.1);
+    o.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 1.2);
+    g.gain.setValueAtTime(0.3, audioCtx.currentTime + i * 0.1);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.2);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(audioCtx.currentTime + i * 0.1); o.stop(audioCtx.currentTime + 1.2);
+  });
+  noise.start(); noise.stop(audioCtx.currentTime + 1.5);
+}
+
+// ─── Sprites ──────────────────────────────────────────────────────────────────
+const SPR = {
+  A: [
+    [[0,0,1,0,0,0,0,0,1,0,0],[0,0,0,1,0,0,0,1,0,0,0],[0,0,1,1,1,1,1,1,1,0,0],[0,1,1,0,1,1,1,0,1,1,0],[1,1,1,1,1,1,1,1,1,1,1],[1,0,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,1,0,1],[0,0,0,1,1,0,1,1,0,0,0]],
+    [[0,0,1,0,0,0,0,0,1,0,0],[1,0,0,1,0,0,0,1,0,0,1],[1,0,1,1,1,1,1,1,1,0,1],[1,1,1,0,1,1,1,0,1,1,1],[1,1,1,1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1,1,1,0],[0,0,1,0,0,0,0,0,1,0,0],[0,1,0,0,0,0,0,0,0,1,0]]
+  ],
+  B: [
+    [[0,1,0,0,0,0,0,0,1,0],[0,0,1,0,0,0,1,0,0,0],[0,1,1,1,1,1,1,1,1,0],[1,1,0,1,1,1,1,0,1,1],[1,1,1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1,1,0],[0,1,0,0,0,0,0,0,1,0],[0,0,1,0,0,1,0,1,0,0]],
+    [[0,1,0,0,0,0,0,0,1,0],[1,0,0,1,0,0,1,0,0,1],[1,0,1,1,1,1,1,1,0,1],[1,1,0,1,1,1,1,0,1,1],[1,1,1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1,1,0],[0,0,1,0,0,0,0,1,0,0],[0,1,0,0,0,0,0,0,1,0]]
+  ],
+  C: [
+    [[0,0,0,1,1,1,1,0,0,0],[0,1,1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1,1,1],[1,1,0,1,1,1,1,0,1,1],[1,1,1,1,1,1,1,1,1,1],[0,1,1,0,0,0,0,1,1,0],[0,0,1,0,1,0,1,0,1,0],[0,1,0,0,0,0,0,0,0,1]],
+    [[0,0,0,1,1,1,1,0,0,0],[0,1,1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1,1,1],[1,1,0,1,1,1,1,0,1,1],[1,1,1,1,1,1,1,1,1,1],[0,0,1,1,0,0,1,1,0,0],[0,1,0,1,1,1,1,0,1,0],[1,0,1,0,0,0,0,1,0,1]]
+  ]
+};
+
+const UFO_SPR = [
+  [0,0,0,1,1,1,1,1,1,0,0,0],
+  [0,1,1,1,1,1,1,1,1,1,1,0],
+  [1,1,0,1,0,1,1,0,1,0,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1],
+  [0,1,1,0,1,1,1,1,0,1,1,0],
+  [0,0,1,0,0,0,0,0,0,1,0,0],
+];
+const UFO_PIX = 5, UFO_W = UFO_SPR[0].length * UFO_PIX, UFO_H = UFO_SPR.length * UFO_PIX;
+const UFO_Y = 42, UFO_POINTS = [100, 150, 200, 300, 500];
+
+// ─── Giant Boss Sprite (16×10 px, scale 7 = 112×70) ──────────────────────────
+const BOSS_SPR = [
+  [0,0,0,1,0,0,1,1,1,1,0,0,1,0,0,0],
+  [0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+  [0,1,1,0,1,1,1,1,1,1,1,1,0,1,1,0],
+  [1,1,0,1,1,0,1,1,1,1,0,1,1,0,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,1,1,0,1,1,0,0,1,1,0,1,1,0,1],
+  [1,0,0,1,0,0,0,1,1,0,0,0,1,0,0,1],
+  [0,1,0,0,1,0,0,1,1,0,0,1,0,0,1,0],
+  [0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0],
+];
+const BOSS_PIX = 7;
+const BOSS_W = BOSS_SPR[0].length * BOSS_PIX; // 112
+const BOSS_H = BOSS_SPR.length    * BOSS_PIX; // 70
+const BOSS_HP_MAX = 20;
+const BOSS_SCORE  = 5000;
+
+// ─── Row config ───────────────────────────────────────────────────────────────
+const ROW_CFG = [
+  ['C', '#ff3366', 345], ['B', '#ff8800', 28], ['B', '#ffee00', 55], ['A', '#44ff88', 145], ['A', '#33aaff', 210],
+];
+const ROWS = 5, COLS = 9;
+const IW = 44, IH = 32, PX = 14, PY = 16, PIX = 3;
+const GRID_X = (W - COLS * (IW + PX) + PX) / 2;
+const GRID_Y = 72;
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let state = 'title';
+let score, lives, level;
+let invaders, invDir, invMoveTimer, invAnimFrame, invAnimTimer;
+let paddle, ball;
+let particles = [], popups = [];
+let ufo = null, ufoTimer = 0, ufoSpawnAt = 0;
+let boss = null, bossTriggered = false, bossProjectiles = [];
+let screenShake = 0, flashAlpha = 0;
+let mouseX = W / 2;
+let prevGpA = false;
+// ─── Shining invaders (3体倒すと残機+1) ──────────────────────────────────────
+let shineSet = new Set();   // 光っているインベーダーのインデックス
+let shineKills = 0;         // 光りインベーダーを倒した数
+let shineTimer = 0;         // 次のローテーションまでのカウンタ
+const SHINE_MAX = 2;        // 同時に光る数
+const SHINE_ROTATE = 220;   // 何フレームごとに入れ替え
+const SHINE_NEED = 3;       // 何体倒すと+1 life
+
+// ─── Shield ───────────────────────────────────────────────────────────────────
+let shield = 2;
+const SHIELD_MAX = 2;
+const SHIELD_RECHARGE = 480; // フレーム数（約16秒で1回復）
+let shieldTimer = 0;
+
+// ─── Background ───────────────────────────────────────────────────────────────
+const STARS = Array.from({ length: 120 }, () => ({
+  x: Math.random() * W, y: Math.random() * H,
+  s: Math.random() < 0.1 ? 2.5 : Math.random() < 0.3 ? 1.5 : 1,
+  p: Math.random() * Math.PI * 2,
+  sp: 0.4 + Math.random() * 0.8,
+}));
+const NEBULAS = Array.from({ length: 4 }, () => ({
+  x: Math.random() * W, y: Math.random() * H,
+  r: 80 + Math.random() * 120, hue: Math.random() * 360,
+}));
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+function initGame() {
+  score = 0; lives = 3; level = 1;
+  particles = []; popups = [];
+  ufo = null; ufoTimer = 0; ufoSpawnAt = 600 + Math.floor(Math.random() * 600);
+  stopUfoHum();
+  boss = null; bossTriggered = false; bossProjectiles = [];
+  shineSet = new Set(); shineKills = 0; shineTimer = 0;
+  shield = SHIELD_MAX; shieldTimer = 0;
+  initLevel();
+}
+function initLevel() {
+  invaders = [];
+  for (let r = 0; r < ROWS; r++) {
+    const [type, color, baseHue] = ROW_CFG[r];
+    for (let c = 0; c < COLS; c++) {
+      invaders.push({ bx: GRID_X + c*(IW+PX), by: GRID_Y + r*(IH+PY), type, color, baseHue, alive: true, row: r, col: c });
+    }
+  }
+  invDir = 1; invMoveTimer = 0; invAnimFrame = 0; invAnimTimer = 0;
+  boss = null; bossTriggered = false; bossProjectiles = [];
+  shineSet = new Set(); shineTimer = 0;
+  paddle = { x: W/2 - 55, y: H - 48, w: 110, h: 13 };
+  resetBall();
+}
+function resetBall() {
+  ball = { x: paddle.x + paddle.w/2, y: paddle.y - 12, r: 8, dx: 0, dy: 0, launched: false, trail: [] };
+}
+function launchBall() {
+  const spd = 5 + level * 0.25;
+  const a = -Math.PI/2 + (Math.random() - 0.5) * 0.7;
+  ball.dx = spd * Math.cos(a); ball.dy = spd * Math.sin(a); ball.launched = true;
+}
+
+// ─── Boss ─────────────────────────────────────────────────────────────────────
+function spawnBoss() {
+  const maxHp = BOSS_HP_MAX + (level - 1) * 3;
+  boss = {
+    phase: 'warning', timer: 0,
+    x: W/2 - BOSS_W/2, y: -BOSS_H - 10, dx: 2.0,
+    hp: maxHp, maxHp,
+    hue: 0, frame: 0, frameTimer: 0,
+    hitFlash: 0, shootTimer: 0, dyingTimer: 0,
+    damageStage: 0,        // 0=フル, 1=中破, 2=大破
+    brokenPixels: new Set(), // 吹き飛んだピクセルのインデックス
+  };
+  playBossWarningSound();
+}
+
+// ボスのダメージ段階を上げてピクセルを吹き飛ばす
+function bossTakeDamageStage(newStage) {
+  if (!boss || boss.damageStage >= newStage) return;
+  boss.damageStage = newStage;
+  // 有効なピクセルを集めて、まだ残っているものをランダムに消す
+  const alivePixels = [];
+  for (let r = 0; r < BOSS_SPR.length; r++)
+    for (let c = 0; c < BOSS_SPR[r].length; c++)
+      if (BOSS_SPR[r][c] && !boss.brokenPixels.has(r * 16 + c)) alivePixels.push(r * 16 + c);
+  const destroyCount = Math.floor(alivePixels.length * (newStage === 1 ? 0.28 : 0.35));
+  // 外周・端から優先的に吹き飛ばす
+  for (let i = 0; i < destroyCount; i++) {
+    const idx = Math.floor(Math.random() * alivePixels.length);
+    boss.brokenPixels.add(alivePixels.splice(idx, 1)[0]);
+  }
+  // 段階ごとのエフェクト
+  addShake(newStage === 1 ? 10 : 14);
+  flashAlpha = newStage === 1 ? 0.35 : 0.6;
+  for (let i = 0; i < 6; i++)
+    spawnParticles(boss.x + Math.random() * BOSS_W, boss.y + Math.random() * BOSS_H,
+      newStage === 1 ? '#ff8800' : '#ff3300', 15);
+  const label = newStage === 1 ? '💥 DAMAGED!' : '🔥 CRITICAL!';
+  popups.push({ x: boss.x + BOSS_W/2, y: boss.y - 10, text: label, life: 1.5, color: newStage === 1 ? '#ff8800' : '#ff3300' });
+}
+function updateBoss() {
+  if (!boss) return;
+  boss.hue = (boss.hue + 2) % 360;
+  boss.frameTimer++;
+  if (boss.frameTimer >= 20) { boss.frameTimer = 0; boss.frame = 1 - boss.frame; }
+  if (boss.hitFlash > 0) boss.hitFlash -= 0.07;
+
+  if (boss.phase === 'warning') {
+    boss.timer++;
+    if (boss.timer >= 120) { boss.phase = 'entering'; boss.timer = 0; }
+    return;
+  }
+  if (boss.phase === 'entering') {
+    boss.y += 2.5;
+    if (boss.y >= 55) { boss.y = 55; boss.phase = 'active'; }
+    return;
+  }
+  if (boss.phase === 'dying') {
+    boss.dyingTimer++;
+    if (boss.dyingTimer >= 90) boss = null;
+    return;
+  }
+
+  // active
+  boss.x += boss.dx;
+  if (boss.x + BOSS_W >= W - 4) { boss.x = W - 4 - BOSS_W; boss.dx = -Math.abs(boss.dx); addShake(2); }
+  if (boss.x <= 4)               { boss.x = 4;               boss.dx =  Math.abs(boss.dx); addShake(2); }
+
+  // ダメージ段階チェック
+  const hpRatio = boss.hp / boss.maxHp;
+  if (boss.damageStage === 0 && hpRatio <= 0.66) bossTakeDamageStage(1);
+  if (boss.damageStage === 1 && hpRatio <= 0.33) bossTakeDamageStage(2);
+
+  // 弾数はダメージ段階で減る: 3→2→1
+  const shotAngles = [[-0.32, 0, 0.32], [-0.28, 0.28], [0]];
+  const shotSet = shotAngles[boss.damageStage];
+  boss.shootTimer++;
+  const interval = Math.max(55, 130 - level * 6);
+  if (boss.shootTimer >= interval) {
+    boss.shootTimer = 0;
+    const cx = boss.x + BOSS_W/2, cy = boss.y + BOSS_H;
+    shotSet.forEach(a => {
+      bossProjectiles.push({ x: cx, y: cy, dx: Math.sin(a)*2.6, dy: Math.cos(a)*2.4 + 0.5, hue: boss.hue, r: 5 });
+    });
+    playBossShoot();
+  }
+
+  // ball vs boss
+  if (ball.launched &&
+      ball.x + ball.r > boss.x && ball.x - ball.r < boss.x + BOSS_W &&
+      ball.y + ball.r > boss.y && ball.y - ball.r < boss.y + BOSS_H) {
+    boss.hp--;
+    boss.hitFlash = 1.0;
+    addShake(5);
+    spawnParticles(ball.x, ball.y, `hsl(${boss.hue},100%,65%)`, 10);
+    playBossHit();
+    const ox = Math.min(ball.x + ball.r - boss.x, boss.x + BOSS_W - (ball.x - ball.r));
+    const oy = Math.min(ball.y + ball.r - boss.y, boss.y + BOSS_H - (ball.y - ball.r));
+    if (ox < oy) ball.dx = -ball.dx; else ball.dy = -ball.dy;
+
+    if (boss.hp <= 0) {
+      boss.phase = 'dying';
+      score += BOSS_SCORE;
+      popups.push({ x: boss.x + BOSS_W/2, y: boss.y + BOSS_H/2, text: `+${BOSS_SCORE}!!`, life: 2.0, color: '#ffff00' });
+      for (let i = 0; i < 10; i++) {
+        setTimeout(() => {
+          if (boss) spawnParticles(
+            boss.x + Math.random() * BOSS_W,
+            boss.y + Math.random() * BOSS_H,
+            `hsl(${Math.random()*360},100%,65%)`, 28
+          );
+        }, i * 80);
+      }
+      addShake(18); flashAlpha = 1.0;
+      playBossDie();
+    }
+  }
+}
+function updateBossProjectiles() {
+  for (let i = bossProjectiles.length - 1; i >= 0; i--) {
+    const p = bossProjectiles[i];
+    p.x += p.dx; p.y += p.dy; p.hue = (p.hue + 5) % 360;
+    // ball deflects/destroys projectile
+    if (ball.launched) {
+      const dx = ball.x - p.x, dy = ball.y - p.y;
+      if (dx*dx + dy*dy < (ball.r + p.r) * (ball.r + p.r)) {
+        spawnParticles(p.x, p.y, `hsl(${p.hue},100%,65%)`, 12);
+        bossProjectiles.splice(i, 1);
+        ball.dy = -Math.abs(ball.dy); // ボールは上に跳ね返る
+        addShake(2);
+        continue;
+      }
+    }
+    // hit paddle or reach bottom
+    if (p.y + p.r >= paddle.y && p.y - p.r <= paddle.y + paddle.h &&
+        p.x + p.r > paddle.x && p.x - p.r < paddle.x + paddle.w) {
+      spawnParticles(p.x, p.y, `hsl(${p.hue},100%,65%)`, 8);
+      bossProjectiles.splice(i, 1);
+      takeDamage();
+      continue;
+    }
+    if (p.x < -20 || p.x > W + 20 || p.y > H + 20) bossProjectiles.splice(i, 1);
+  }
+}
+
+// ─── Screen effects ───────────────────────────────────────────────────────────
+function addShake(v) { screenShake = Math.max(screenShake, v); }
+
+function takeDamage() {
+  if (shield > 0) {
+    shield--;
+    shieldTimer = 0;
+    addShake(6);
+    flashAlpha = 0.3;
+    // シールドヒットの青フラッシュ
+    spawnParticles(paddle.x + paddle.w/2, paddle.y, '#44aaff', 14);
+    resetBall();
+  } else {
+    lives--;
+    addShake(12); flashAlpha = 0.6;
+    if (lives <= 0) state = 'gameover';
+    else { shield = SHIELD_MAX; shieldTimer = 0; resetBall(); }
+  }
+}
+
+// ─── Input ────────────────────────────────────────────────────────────────────
+const keys = new Set();
+document.addEventListener('keydown', e => {
+  keys.add(e.key);
+  if (e.key === ' ' || e.key === 'Enter') {
+    if (state === 'title' || state === 'gameover') { initGame(); state = 'play'; }
+    else if (state === 'play' && !ball.launched) launchBall();
+    e.preventDefault();
+  }
+});
+document.addEventListener('keyup', e => keys.delete(e.key));
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  mouseX = (e.clientX - r.left) * (W / r.width);
+});
+canvas.addEventListener('click', () => {
+  if (state === 'title' || state === 'gameover') { initGame(); state = 'play'; }
+  else if (state === 'play' && !ball.launched) launchBall();
+});
+
+// ─── Gamepad ──────────────────────────────────────────────────────────────────
+function pollGamepad() {
+  let gp;
+  try { gp = navigator.getGamepads()[0]; } catch(e) { return; }
+  if (!gp) return;
+  const axisX  = gp.axes[0] || 0;
+  const dpadL  = gp.buttons[14]?.pressed;
+  const dpadR  = gp.buttons[15]?.pressed;
+  const btnA   = gp.buttons[0]?.pressed;
+
+  if (state === 'play') {
+    const pspd = 7;
+    if (axisX < -0.2 || dpadL) {
+      const mv = dpadL ? pspd : Math.abs(axisX) * pspd * 1.5;
+      paddle.x = Math.max(0, paddle.x - mv);
+      mouseX = paddle.x + paddle.w / 2;
+    }
+    if (axisX > 0.2 || dpadR) {
+      const mv = dpadR ? pspd : Math.abs(axisX) * pspd * 1.5;
+      paddle.x = Math.min(W - paddle.w, paddle.x + mv);
+      mouseX = paddle.x + paddle.w / 2;
+    }
+  }
+  if (btnA && !prevGpA) {
+    audioCtx.resume();
+    if (state === 'title' || state === 'gameover') { initGame(); state = 'play'; }
+    else if (state === 'play' && !ball.launched) launchBall();
+  }
+  prevGpA = btnA;
+}
+
+// ─── Update ───────────────────────────────────────────────────────────────────
+function update() {
+  pollGamepad();
+  if (screenShake > 0) screenShake *= 0.82;
+  if (flashAlpha  > 0) flashAlpha  -= 0.04;
+  // シールド回復
+  if (shield < SHIELD_MAX) {
+    shieldTimer++;
+    if (shieldTimer >= SHIELD_RECHARGE) { shieldTimer = 0; shield++; }
+  } else { shieldTimer = 0; }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life -= 0.025;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  for (let i = popups.length - 1; i >= 0; i--) {
+    popups[i].y -= 1.2; popups[i].life -= 0.018;
+    if (popups[i].life <= 0) popups.splice(i, 1);
+  }
+
+  if (state !== 'play') return;
+
+  // Paddle
+  const pspd = 7;
+  if (keys.has('ArrowLeft')  || keys.has('a') || keys.has('A')) { paddle.x = Math.max(0, paddle.x - pspd); mouseX = paddle.x + paddle.w/2; }
+  if (keys.has('ArrowRight') || keys.has('d') || keys.has('D')) { paddle.x = Math.min(W - paddle.w, paddle.x + pspd); mouseX = paddle.x + paddle.w/2; }
+  paddle.x += (mouseX - paddle.w/2 - paddle.x) * 0.3;
+  paddle.x = Math.max(0, Math.min(W - paddle.w, paddle.x));
+
+  if (!ball.launched) { ball.x = paddle.x + paddle.w/2; ball.y = paddle.y - ball.r - 2; return; }
+
+  ball.trail.push({ x: ball.x, y: ball.y });
+  if (ball.trail.length > 14) ball.trail.shift();
+  ball.x += ball.dx; ball.y += ball.dy;
+
+  // Walls
+  if (ball.x - ball.r < 0) { ball.x = ball.r; ball.dx = Math.abs(ball.dx); playWallHit(); }
+  if (ball.x + ball.r > W) { ball.x = W - ball.r; ball.dx = -Math.abs(ball.dx); playWallHit(); }
+  if (ball.y - ball.r < 0) { ball.y = ball.r; ball.dy = Math.abs(ball.dy); playWallHit(); }
+  if (ball.y - ball.r > H) { lives--; if (lives <= 0) { state = 'gameover'; return; } resetBall(); return; }
+
+  // Paddle hit
+  if (ball.dy > 0 &&
+      ball.y + ball.r >= paddle.y && ball.y + ball.r <= paddle.y + paddle.h + 4 &&
+      ball.x + ball.r > paddle.x - 2 && ball.x - ball.r < paddle.x + paddle.w + 2) {
+    const rel = (ball.x - (paddle.x + paddle.w/2)) / (paddle.w/2);
+    const a = rel * Math.PI * 0.33 - Math.PI/2;
+    const spd = Math.hypot(ball.dx, ball.dy);
+    ball.dx = spd * Math.cos(a); ball.dy = -Math.abs(spd * Math.sin(a));
+    ball.y = paddle.y - ball.r - 1;
+    playPaddleHit();
+    spawnParticles(ball.x, paddle.y, '#00ffff', 5);
+  }
+
+  // Invader hit
+  for (const inv of invaders) {
+    if (!inv.alive) continue;
+    if (ball.x + ball.r > inv.bx && ball.x - ball.r < inv.bx + IW &&
+        ball.y + ball.r > inv.by && ball.y - ball.r < inv.by + IH) {
+      inv.alive = false;
+      score += (ROWS - inv.row) * 10 * level;
+      const isShining = shineSet.has(invaders.indexOf(inv));
+      spawnParticles(inv.bx + IW/2, inv.by + IH/2, isShining ? '#ffffff' : inv.color, isShining ? 30 : 20);
+      playInvaderHit(); addShake(isShining ? 6 : 3);
+      shineSet.delete(invaders.indexOf(inv));
+      if (isShining) {
+        shineKills++;
+        if (shineKills >= SHINE_NEED) {
+          shineKills = 0; lives++;
+          popups.push({ x: inv.bx + IW/2, y: inv.by, text: '✨ +1 LIFE!', life: 2.0, color: '#ffff88' });
+          addShake(8); flashAlpha = 0.4;
+        } else {
+          popups.push({ x: inv.bx + IW/2, y: inv.by, text: `★ ${shineKills}/${SHINE_NEED}`, life: 1.2, color: '#ffe000' });
+        }
+      }
+      const ox = Math.min(ball.x + ball.r - inv.bx, inv.bx + IW - (ball.x - ball.r));
+      const oy = Math.min(ball.y + ball.r - inv.by, inv.by + IH - (ball.y - ball.r));
+      if (ox < oy) ball.dx = -ball.dx; else ball.dy = -ball.dy;
+      break;
+    }
+  }
+
+  // Shine rotation
+  shineTimer++;
+  if (shineTimer >= SHINE_ROTATE) {
+    shineTimer = 0;
+    const aliveIdx = invaders.map((inv,i) => inv.alive ? i : -1).filter(i => i >= 0);
+    // 一番古いものを外してランダムで新しいのを追加
+    if (shineSet.size > 0) shineSet.delete(shineSet.values().next().value);
+    if (aliveIdx.length > 0) {
+      let next; do { next = aliveIdx[Math.floor(Math.random() * aliveIdx.length)]; } while (shineSet.has(next) && aliveIdx.length > shineSet.size);
+      shineSet.add(next);
+    }
+    // 常にSHINE_MAX体まで補充
+    while (shineSet.size < SHINE_MAX && aliveIdx.length > shineSet.size) {
+      const candidates = aliveIdx.filter(i => !shineSet.has(i));
+      if (candidates.length === 0) break;
+      shineSet.add(candidates[Math.floor(Math.random() * candidates.length)]);
+    }
+  }
+
+  // Boss spawn: when 50% of invaders cleared
+  const alive = invaders.filter(i => i.alive);
+  if (!bossTriggered && alive.length <= Math.floor(invaders.length / 2)) {
+    bossTriggered = true;
+    spawnBoss();
+  }
+
+  // Win: all invaders dead AND boss gone
+  if (invaders.every(i => !i.alive) && boss === null) {
+    level++;
+    particles = []; bossProjectiles = [];
+    initLevel();
+    return;
+  }
+
+  updateBoss();
+  updateBossProjectiles();
+
+  // UFO
+  ufoTimer++;
+  if (!ufo && ufoTimer >= ufoSpawnAt) {
+    ufoTimer = 0; ufoSpawnAt = 700 + Math.floor(Math.random() * 700);
+    const goR = Math.random() < 0.5;
+    ufo = { x: goR ? -UFO_W - 4 : W + 4, y: UFO_Y, dx: goR ? 2.8 : -2.8,
+            points: UFO_POINTS[Math.floor(Math.random() * UFO_POINTS.length)],
+            hue: Math.floor(Math.random() * 360) };
+    startUfoHum();
+  }
+  if (ufo) {
+    ufo.x += ufo.dx; ufo.hue = (ufo.hue + 3) % 360;
+    if (ufo.x > W + UFO_W + 4 || ufo.x < -UFO_W - 4) { ufo = null; stopUfoHum(); }
+    if (ufo && ball.launched &&
+        ball.x + ball.r > ufo.x && ball.x - ball.r < ufo.x + UFO_W &&
+        ball.y + ball.r > ufo.y && ball.y - ball.r < ufo.y + UFO_H) {
+      score += ufo.points;
+      popups.push({ x: ufo.x + UFO_W/2, y: ufo.y, text: `+${ufo.points}`, life: 1.0, color: `hsl(${ufo.hue},100%,65%)` });
+      spawnParticles(ufo.x + UFO_W/2, ufo.y + UFO_H/2, `hsl(${ufo.hue},100%,65%)`, 22);
+      spawnParticles(ufo.x + UFO_W/2, ufo.y + UFO_H/2, '#ffffff', 10);
+      playUfoBoom(); addShake(8);
+      ufo = null; ball.dy = -Math.abs(ball.dy);
+    }
+  }
+
+  // Invader animation & movement
+  invAnimTimer++;
+  if (invAnimTimer >= 22) { invAnimTimer = 0; invAnimFrame = 1 - invAnimFrame; }
+  if (alive.length === 0) return;
+  const speedTick = Math.max(4, Math.floor(50 - alive.length * 1.3));
+  invMoveTimer++;
+  if (invMoveTimer >= speedTick) {
+    invMoveTimer = 0;
+    let minX = Infinity, maxX = -Infinity;
+    for (const inv of alive) { minX = Math.min(minX, inv.bx); maxX = Math.max(maxX, inv.bx + IW); }
+    const step = (1.8 + level * 0.4) * invDir;
+    if (maxX + step > W - 6) { invDir = -1; for (const inv of invaders) inv.by += 14; }
+    else if (minX + step < 6) { invDir =  1; for (const inv of invaders) inv.by += 14; }
+    const s = (1.8 + level * 0.4) * invDir;
+    for (const inv of invaders) inv.bx += s;
+  }
+}
+
+function spawnParticles(x, y, color, count = 14) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2, spd = 1.5 + Math.random() * 4.5;
+    particles.push({ x, y, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - 1.5, color, size: 2 + Math.random()*4, life: 0.8 + Math.random()*0.6 });
+  }
+}
+
+// ─── Draw ─────────────────────────────────────────────────────────────────────
+function drawBg() {
+  ctx.fillStyle = '#00000f';
+  ctx.fillRect(0, 0, W, H);
+  const t = Date.now() / 1000;
+  for (const neb of NEBULAS) {
+    const g = ctx.createRadialGradient(neb.x, neb.y, 0, neb.x, neb.y, neb.r);
+    const hue = (neb.hue + t * 8) % 360;
+    g.addColorStop(0, `hsla(${hue},80%,30%,0.07)`);
+    g.addColorStop(1, `hsla(${hue},80%,10%,0)`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  for (const s of STARS) {
+    const a = 0.15 + 0.7 * (0.5 + 0.5 * Math.sin(t * s.sp + s.p));
+    ctx.fillStyle = `rgba(255,255,255,${a.toFixed(2)})`;
+    ctx.fillRect(s.x, s.y, s.s, s.s);
+  }
+  if (boss && (boss.phase === 'warning' || boss.phase === 'entering')) {
+    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 80);
+    ctx.fillStyle = `rgba(255,0,0,${(0.07 * pulse).toFixed(3)})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (boss && boss.phase === 'active') {
+    ctx.fillStyle = 'rgba(255,0,0,0.03)'; ctx.fillRect(0, 0, W, H);
+  }
+}
+function drawScanlines() {
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = '#000';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  ctx.globalAlpha = 1;
+}
+function drawSprite(x, y, type, color, frame, scale) {
+  const rows = SPR[type][frame];
+  ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 9;
+  for (let r = 0; r < rows.length; r++)
+    for (let c = 0; c < rows[r].length; c++)
+      if (rows[r][c]) ctx.fillRect(x + c*scale, y + r*scale, scale, scale);
+  ctx.shadowBlur = 0;
+}
+function drawInvaders() {
+  const t = Date.now() / 1000;
+  for (let idx = 0; idx < invaders.length; idx++) {
+    const inv = invaders[idx];
+    if (!inv.alive) continue;
+    const spr = SPR[inv.type][invAnimFrame];
+    const cols = spr[0].length;
+    const sw = cols * PIX, sh = spr.length * PIX;
+    const ox = inv.bx + (IW - sw)/2, oy = inv.by + (IH - sh)/2;
+    const isShining = shineSet.has(idx);
+
+    if (isShining) {
+      // 光りインベーダー: 虹色ピクセル + 強いグロー + パルス
+      const pulse = 1 + 0.25 * Math.sin(t * 8);
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 22 * pulse;
+      for (let r = 0; r < spr.length; r++) {
+        for (let c = 0; c < spr[r].length; c++) {
+          if (!spr[r][c]) continue;
+          const hue = (t * 160 + c * (360 / cols) + idx * 40) % 360;
+          ctx.fillStyle = `hsl(${hue | 0}, 100%, 68%)`;
+          ctx.fillRect(ox + c*PIX, oy + r*PIX, PIX, PIX);
+        }
+      }
+    } else {
+      // 通常インベーダー: 単色
+      const glow = 8 + 3 * Math.abs(Math.sin(t * 1.5 + inv.col * 0.4));
+      ctx.fillStyle = inv.color;
+      ctx.shadowColor = inv.color;
+      ctx.shadowBlur = glow;
+      for (let r = 0; r < spr.length; r++)
+        for (let c = 0; c < spr[r].length; c++)
+          if (spr[r][c]) ctx.fillRect(ox + c*PIX, oy + r*PIX, PIX, PIX);
+    }
+    ctx.shadowBlur = 0;
+  }
+}
+function drawBoss() {
+  if (!boss || boss.phase === 'warning') return;
+  const alpha = boss.phase === 'dying' ? Math.max(0, 1 - boss.dyingTimer / 90) : 1;
+  ctx.save(); ctx.globalAlpha = alpha;
+  const t = Date.now() / 1000;
+
+  // 段階ごとの基本色: フル=シアン系, 中破=オレンジ, 大破=赤
+  const stageHue = [boss.hue, 25, 0][boss.damageStage];
+  const col = boss.hitFlash > 0.5 ? '#ffffff' : `hsl(${stageHue},100%,${boss.damageStage === 2 ? 55 : 60}%)`;
+  ctx.fillStyle = col; ctx.shadowColor = col;
+  ctx.shadowBlur = 20 + 8 * Math.abs(Math.sin(t * 3));
+
+  for (let r = 0; r < BOSS_SPR.length; r++) {
+    for (let c = 0; c < BOSS_SPR[r].length; c++) {
+      if (!BOSS_SPR[r][c]) continue;
+      if (boss.brokenPixels.has(r * 16 + c)) {
+        // 吹き飛んだピクセル: 消えかけの煙エフェクト（まれに小さい点）
+        if (Math.random() < 0.04) {
+          ctx.globalAlpha = alpha * 0.3 * Math.random();
+          ctx.fillStyle = '#ff6600';
+          ctx.fillRect(boss.x + c*BOSS_PIX + Math.random()*4-2, boss.y + r*BOSS_PIX + Math.random()*4-2, 3, 3);
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = col;
+        }
+        continue;
+      }
+      ctx.fillRect(boss.x + c*BOSS_PIX, boss.y + r*BOSS_PIX, BOSS_PIX, BOSS_PIX);
+    }
+  }
+  ctx.shadowBlur = 0; ctx.restore();
+}
+function drawBossHP() {
+  if (!boss || boss.phase !== 'active') return;
+  const barW = 200, barH = 10;
+  const barX = W/2 - barW/2, barY = boss.y + BOSS_H + 8;
+  const ratio = Math.max(0, boss.hp / (BOSS_HP_MAX + (level-1)*3));
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(barX-2, barY-2, barW+4, barH+4);
+  const hpHue = ratio * 120;
+  ctx.fillStyle = `hsl(${hpHue},100%,50%)`;
+  ctx.shadowColor = `hsl(${hpHue},100%,70%)`; ctx.shadowBlur = 8;
+  ctx.fillRect(barX, barY, barW * ratio, barH);
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, barH);
+  // 段階区切り線（1/3, 2/3の位置）
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.5;
+  [1/3, 2/3].forEach(pos => {
+    const lx = barX + barW * pos;
+    ctx.beginPath(); ctx.moveTo(lx, barY - 2); ctx.lineTo(lx, barY + barH + 2); ctx.stroke();
+  });
+  ctx.font = 'bold 10px "Courier New"'; ctx.fillStyle = '#fff';
+  const stageLabel = ['FULL', 'DAMAGED', 'CRITICAL'][boss.damageStage];
+  ctx.textAlign = 'center'; ctx.fillText(`BOSS HP  [${stageLabel}]`, W/2, barY - 4); ctx.textAlign = 'left';
+}
+function drawBossWarning() {
+  if (!boss || boss.phase !== 'warning') return;
+  const t = Date.now() / 1000;
+  if (Math.sin(t * 8) < 0) return;
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 38px "Courier New"';
+  const hue = (t * 80) % 360;
+  ctx.fillStyle = `hsl(${hue},100%,65%)`; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 30;
+  ctx.fillText('⚠ WARNING ⚠', W/2, H/2 - 20);
+  ctx.font = 'bold 17px "Courier New"';
+  ctx.fillStyle = '#ff4444'; ctx.shadowColor = '#ff0000';
+  ctx.fillText('GIANT INVADER INCOMING!', W/2, H/2 + 20);
+  ctx.shadowBlur = 0; ctx.textAlign = 'left';
+}
+function drawBossProjectiles() {
+  for (const p of bossProjectiles) {
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.fillStyle = `hsl(${p.hue},100%,65%)`;
+    ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 14;
+    ctx.fill(); ctx.shadowBlur = 0;
+  }
+}
+function drawPaddle() {
+  const g = ctx.createLinearGradient(paddle.x, paddle.y, paddle.x, paddle.y + paddle.h);
+  g.addColorStop(0, '#aaffff'); g.addColorStop(0.5, '#00ccdd'); g.addColorStop(1, '#006677');
+  ctx.fillStyle = g; ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 18;
+  ctx.beginPath();
+  ctx.moveTo(paddle.x+6, paddle.y); ctx.lineTo(paddle.x+paddle.w-6, paddle.y);
+  ctx.quadraticCurveTo(paddle.x+paddle.w, paddle.y, paddle.x+paddle.w, paddle.y+6);
+  ctx.lineTo(paddle.x+paddle.w, paddle.y+paddle.h-6);
+  ctx.quadraticCurveTo(paddle.x+paddle.w, paddle.y+paddle.h, paddle.x+paddle.w-6, paddle.y+paddle.h);
+  ctx.lineTo(paddle.x+6, paddle.y+paddle.h);
+  ctx.quadraticCurveTo(paddle.x, paddle.y+paddle.h, paddle.x, paddle.y+paddle.h-6);
+  ctx.lineTo(paddle.x, paddle.y+6);
+  ctx.quadraticCurveTo(paddle.x, paddle.y, paddle.x+6, paddle.y);
+  ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
+}
+function drawShield() {
+  const segW = 18, segH = 10, gap = 4;
+  const totalW = SHIELD_MAX * segW + (SHIELD_MAX - 1) * gap;
+  const sx = paddle.x + paddle.w / 2 - totalW / 2;
+  const sy = paddle.y - 20;
+  const t = Date.now() / 1000;
+  // 回復中は点滅
+  const recharging = shield < SHIELD_MAX;
+  const blink = recharging && Math.sin(t * 6) > 0;
+  for (let i = 0; i < SHIELD_MAX; i++) {
+    const x = sx + i * (segW + gap);
+    const filled = i < shield;
+    if (filled) {
+      ctx.fillStyle = '#44aaff';
+      ctx.shadowColor = '#44aaff'; ctx.shadowBlur = 10;
+    } else if (recharging && i === shield && blink) {
+      ctx.fillStyle = 'rgba(68,170,255,0.4)'; ctx.shadowBlur = 0;
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.shadowBlur = 0;
+    }
+    ctx.fillRect(x, sy, segW, segH);
+  }
+  ctx.shadowBlur = 0;
+}
+function drawBall() {
+  const t = Date.now() / 1000;
+  for (let i = 0; i < ball.trail.length; i++) {
+    const ratio = i / ball.trail.length;
+    const hue = (t * 180 + i * 18) % 360;
+    ctx.beginPath();
+    ctx.arc(ball.trail[i].x, ball.trail[i].y, ball.r * ratio * 0.8, 0, Math.PI*2);
+    ctx.fillStyle = `hsla(${hue},100%,70%,${(ratio * 0.45).toFixed(2)})`; ctx.fill();
+  }
+  ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
+  const g = ctx.createRadialGradient(ball.x-2, ball.y-2, 1, ball.x, ball.y, ball.r);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#aaeeff'); g.addColorStop(1, '#44aacc');
+  ctx.fillStyle = g; ctx.shadowColor = '#88eeff'; ctx.shadowBlur = 24; ctx.fill(); ctx.shadowBlur = 0;
+}
+function drawUfo() {
+  if (!ufo) return;
+  const color = `hsl(${ufo.hue},100%,65%)`;
+  ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 22;
+  for (let r = 0; r < UFO_SPR.length; r++)
+    for (let c = 0; c < UFO_SPR[r].length; c++)
+      if (UFO_SPR[r][c]) ctx.fillRect(ufo.x + c*UFO_PIX, ufo.y + r*UFO_PIX, UFO_PIX, UFO_PIX);
+  ctx.shadowBlur = 0;
+}
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 8;
+    ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+}
+function drawPopups() {
+  ctx.textAlign = 'center';
+  for (const p of popups) {
+    ctx.globalAlpha = Math.min(1, p.life * 1.5);
+    ctx.font = `bold 22px "Courier New"`;
+    ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 14;
+    ctx.fillText(p.text, p.x, p.y);
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.textAlign = 'left';
+}
+function drawFlash() {
+  if (flashAlpha <= 0) return;
+  ctx.fillStyle = `rgba(255,255,255,${Math.min(flashAlpha, 1).toFixed(2)})`;
+  ctx.fillRect(0, 0, W, H);
+}
+function drawHUD() {
+  ctx.font = 'bold 16px "Courier New"'; ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 6;
+  ctx.fillStyle = '#00ffff';
+  ctx.textAlign = 'left';  ctx.fillText(`SCORE: ${score}`, 12, 25);
+  ctx.textAlign = 'center'; ctx.fillText(`LEVEL ${level}`, W/2, 25);
+  ctx.shadowBlur = 0;
+  // ライフ表示：右端から左へ並べる
+  for (let i = 0; i < lives; i++) drawSprite(W - 28 - i * 22, 12, 'B', '#00ffff', 0, 2);
+  // 光りインベーダー進捗 ★☆☆
+  ctx.font = 'bold 13px "Courier New"';
+  ctx.textAlign = 'left';
+  const t = Date.now() / 1000;
+  for (let i = 0; i < SHINE_NEED; i++) {
+    if (i < shineKills) {
+      const hue = (t * 120 + i * 40) % 360;
+      ctx.fillStyle = `hsl(${hue|0},100%,65%)`; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.shadowBlur = 0;
+    }
+    ctx.fillText('★', 14 + i * 18, H - 10);
+  }
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(0,255,255,0.2)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, 33); ctx.lineTo(W, 33); ctx.stroke();
+}
+// ─── Title screen demo state ──────────────────────────────────────────────────
+let _td = null; // タイトル用デモデータ（初回のみ作成）
+function initTitleDemo() {
+  const cols = 9;
+  const tw = cols * (IW + PX) - PX;
+  const startX = (W - tw) / 2;
+  const invs = [];
+  for (let r = 0; r < 5; r++) {
+    const [type, color, bh] = ROW_CFG[r];
+    for (let c = 0; c < cols; c++)
+      invs.push({ bx: startX + c*(IW+PX), by: 310 + r*(IH+PY), type, color, baseHue: bh, row: r, col: c });
+  }
+  _td = { invs, dir: 1, mvTimer: 0,
+          ufoX: -UFO_W, ufoDir: 1, ufoOn: false, ufoTimer: 200, ufoHue: 0,
+          fireworks: [], fwTimer: 80,
+          glowSet: new Set(), glowTimer: 0,
+          titleFlash: 0, titleFlashTimer: 300 };
+}
+function updateTitleDemo() {
+  if (!_td) return;
+  // 編隊移動
+  _td.mvTimer++;
+  if (_td.mvTimer >= 28) {
+    _td.mvTimer = 0;
+    const minX = _td.invs.reduce((m,i) => Math.min(m, i.bx), Infinity);
+    const maxX = _td.invs.reduce((m,i) => Math.max(m, i.bx+IW), -Infinity);
+    if (maxX + _td.dir * 1.5 > W - 8) _td.dir = -1;
+    else if (minX + _td.dir * 1.5 < 8) _td.dir = 1;
+    for (const i of _td.invs) i.bx += 1.5 * _td.dir;
+  }
+  // UFO
+  _td.ufoHue = (_td.ufoHue + 3) % 360;
+  if (!_td.ufoOn) {
+    _td.ufoTimer--;
+    if (_td.ufoTimer <= 0) {
+      _td.ufoOn = true; _td.ufoDir = Math.random() < 0.5 ? 1 : -1;
+      _td.ufoX = _td.ufoDir > 0 ? -UFO_W - 4 : W + 4;
+      _td.ufoTimer = 300 + Math.random() * 300;
+    }
+  } else {
+    _td.ufoX += _td.ufoDir * 2.5;
+    if (_td.ufoX > W + UFO_W + 4 || _td.ufoX < -UFO_W - 4) _td.ufoOn = false;
+  }
+  // インベーダーランダムグロー
+  _td.glowTimer--;
+  if (_td.glowTimer <= 0) {
+    _td.glowTimer = 70 + Math.floor(Math.random() * 80);
+    _td.glowSet.clear();
+    const count = 2 + Math.floor(Math.random() * 3);
+    while (_td.glowSet.size < count)
+      _td.glowSet.add(Math.floor(Math.random() * _td.invs.length));
+  }
+  // タイトル虹色フラッシュ
+  _td.titleFlashTimer--;
+  if (_td.titleFlashTimer <= 0) {
+    _td.titleFlashTimer = 280 + Math.floor(Math.random() * 240);
+    _td.titleFlash = 90;
+  }
+  if (_td.titleFlash > 0) _td.titleFlash--;
+  // 花火
+  _td.fwTimer--;
+  if (_td.fwTimer <= 0) {
+    _td.fwTimer = 90 + Math.floor(Math.random() * 120);
+    const hue = Math.floor(Math.random() * 360);
+    _td.fireworks.push({
+      x: 60 + Math.random() * (W - 120),
+      y: H - 50,
+      vy: -(13 + Math.random() * 5),
+      hue, phase: 'rising', particles: []
+    });
+  }
+  for (let fi = _td.fireworks.length - 1; fi >= 0; fi--) {
+    const fw = _td.fireworks[fi];
+    if (fw.phase === 'rising') {
+      fw.y += fw.vy;
+      fw.vy += 0.38;
+      if (fw.vy >= 0) {
+        fw.phase = 'burst';
+        for (let j = 0; j < 32; j++) {
+          const angle = (j / 32) * Math.PI * 2;
+          const spd = 1.5 + Math.random() * 3.5;
+          fw.particles.push({
+            x: fw.x, y: fw.y,
+            vx: Math.cos(angle) * spd,
+            vy: Math.sin(angle) * spd,
+            alpha: 1,
+            hue: (fw.hue + j * 8) % 360
+          });
+        }
+      }
+    } else {
+      for (const p of fw.particles) {
+        p.x += p.vx; p.y += p.vy;
+        p.vy += 0.10;
+        p.vx *= 0.97;
+        p.alpha -= 0.016;
+      }
+      fw.particles = fw.particles.filter(p => p.alpha > 0);
+      if (fw.particles.length === 0) _td.fireworks.splice(fi, 1);
+    }
+  }
+}
+
+function drawTitle() {
+  if (!_td) initTitleDemo();
+  updateTitleDemo();
+  const t = Date.now() / 1000;
+  ctx.textAlign = 'center';
+
+  // ─── 花火 ────────────────────────────────────────
+  for (const fw of _td.fireworks) {
+    if (fw.phase === 'rising') {
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = `hsl(${fw.hue},100%,75%)`;
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10;
+      ctx.fillRect(fw.x - 2, fw.y - 2, 4, 4);
+      ctx.shadowBlur = 0;
+    } else {
+      for (const p of fw.particles) {
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = `hsl(${p.hue},100%,72%)`;
+        ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
+        ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+      }
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  }
+
+  // ─── UFO ─────────────────────────────────────────
+  if (_td.ufoOn) {
+    const uc = `hsl(${_td.ufoHue},100%,65%)`;
+    ctx.fillStyle = uc; ctx.shadowColor = uc; ctx.shadowBlur = 22;
+    for (let r = 0; r < UFO_SPR.length; r++)
+      for (let c = 0; c < UFO_SPR[r].length; c++)
+        if (UFO_SPR[r][c]) ctx.fillRect(_td.ufoX + c*UFO_PIX, 52 + r*UFO_PIX, UFO_PIX, UFO_PIX);
+    // UFOスコア表示
+    const pts = UFO_POINTS[Math.floor(_td.ufoHue/72) % UFO_POINTS.length];
+    ctx.font = 'bold 11px "Courier New"'; ctx.fillStyle = uc;
+    ctx.fillText(`${pts}pts`, _td.ufoX + UFO_W/2, 48);
+    ctx.shadowBlur = 0;
+  }
+
+  // ─── タイトル枠（シアン枠 + コーナーブラケット） ─────────
+  ctx.strokeStyle = 'rgba(0,255,255,0.35)';
+  ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 8; ctx.lineWidth = 1;
+  ctx.strokeRect(22, 100, W - 44, 126); ctx.shadowBlur = 0;
+  // 四隅ブラケット
+  const bSize = 14;
+  ctx.lineWidth = 2.5; ctx.strokeStyle = '#00ffff';
+  ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 14;
+  [[22,100,1,1],[W-22,100,-1,1],[22,226,1,-1],[W-22,226,-1,-1]].forEach(([x,y,sx,sy]) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y + sy*bSize); ctx.lineTo(x, y); ctx.lineTo(x + sx*bSize, y);
+    ctx.stroke();
+  });
+  ctx.shadowBlur = 0;
+
+  // ─── タイトルテキスト ────────────────────────────────
+  ctx.font = 'bold 48px "Courier New"';
+  if (_td.titleFlash > 0) {
+    // 虹色フラッシュ
+    const tf = _td.titleFlash / 90;
+    const th1 = (t * 180) % 360;
+    const th2 = (th1 + 55) % 360;
+    ctx.fillStyle = `hsl(${th1},100%,68%)`; ctx.shadowColor = ctx.fillStyle;
+    ctx.shadowBlur = 28 + 10 * tf;
+    ctx.fillText('INVADER', W/2, 162);
+    ctx.fillStyle = `hsl(${th2},100%,68%)`; ctx.shadowColor = ctx.fillStyle;
+    ctx.fillText('BREAKER', W/2, 210);
+  } else {
+    ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 28;
+    ctx.fillText('INVADER', W/2, 162);
+    ctx.fillText('BREAKER', W/2, 210);
+  }
+  ctx.shadowBlur = 0;
+
+  // ─── インベーダー編隊 ──────────────────────────────
+  for (let idx = 0; idx < _td.invs.length; idx++) {
+    const inv = _td.invs[idx];
+    const spr = SPR[inv.type][invAnimFrame];
+    const sw = spr[0].length * PIX, sh = spr.length * PIX;
+    const ox = inv.bx + (IW-sw)/2, oy = inv.by + (IH-sh)/2;
+    if (_td.glowSet.has(idx)) {
+      const gh = (inv.baseHue + t * 200) % 360;
+      ctx.fillStyle = `hsl(${gh},100%,68%)`;
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 16;
+    } else {
+      ctx.fillStyle = inv.color; ctx.shadowBlur = 0;
+    }
+    for (let r = 0; r < spr.length; r++)
+      for (let c = 0; c < spr[r].length; c++)
+        if (spr[r][c]) ctx.fillRect(ox+c*PIX, oy+r*PIX, PIX, PIX);
+    ctx.shadowBlur = 0;
+  }
+
+  // ─── 操作説明 ─────────────────────────────────────
+  ctx.font = '12px "Courier New"'; ctx.fillStyle = 'rgba(170,170,204,0.85)';
+  ctx.fillText('← → / A D / コントローラー', W/2, 660);
+  ctx.fillText('スペース / Aボタン / クリック で発射', W/2, 676);
+
+  // ─── スタートプロンプト（点滅） ───────────────────
+  if (Math.floor(t * 1.6) % 2 === 0) {
+    ctx.font = 'bold 18px "Courier New"'; ctx.fillStyle = '#00ffff';
+    ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 16;
+    ctx.fillText('▶  SPACE / クリックでスタート！', W/2, 700); ctx.shadowBlur = 0;
+  }
+
+  ctx.textAlign = 'left';
+}
+function drawGameOver() {
+  const t = Date.now() / 1000;
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 56px "Courier New"'; ctx.fillStyle = '#ff2244';
+  ctx.shadowColor = '#ff0033'; ctx.shadowBlur = 28;
+  ctx.fillText('GAME OVER', W/2, 280); ctx.shadowBlur = 0;
+  ctx.font = '28px "Courier New"'; ctx.fillStyle = '#ffffff'; ctx.fillText(`SCORE: ${score}`, W/2, 335);
+  ctx.font = '18px "Courier New"'; ctx.fillStyle = '#aaaacc'; ctx.fillText(`LEVEL: ${level}`, W/2, 368);
+  if (Math.floor(t * 1.6) % 2 === 0) {
+    ctx.font = 'bold 18px "Courier New"'; ctx.fillStyle = '#00ffff';
+    ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 12;
+    ctx.fillText('SPACE / クリックでリトライ', W/2, 430); ctx.shadowBlur = 0;
+  }
+  ctx.font = '12px "Courier New"'; ctx.fillStyle = 'rgba(160,160,200,0.7)';
+  ctx.fillText('© Edeny / EdenCode', W/2, H - 14);
+  ctx.textAlign = 'left';
+}
+
+// ─── Main loop ────────────────────────────────────────────────────────────────
+let lastT = 0;
+function loop(ts) {
+  requestAnimationFrame(loop);
+  if (ts - lastT < 15) return;
+  lastT = ts;
+  update();
+
+  const sx = screenShake > 0.5 ? (Math.random() - 0.5) * screenShake * 2 : 0;
+  const sy = screenShake > 0.5 ? (Math.random() - 0.5) * screenShake * 2 : 0;
+  ctx.save(); ctx.translate(sx, sy);
+  drawBg();
+
+  if (state === 'title') {
+    drawTitle();
+    invAnimTimer++; if (invAnimTimer >= 22) { invAnimTimer = 0; invAnimFrame = 1 - invAnimFrame; }
+    ctx.restore(); drawScanlines(); return;
+  }
+  if (state === 'gameover') {
+    drawGameOver(); drawParticles(); ctx.restore(); drawScanlines(); return;
+  }
+
+  drawInvaders();
+  drawBoss(); drawBossHP(); drawBossWarning(); drawBossProjectiles();
+  drawUfo(); drawParticles(); drawPopups();
+  drawPaddle(); drawShield(); drawBall(); drawFlash(); drawHUD();
+
+  if (!ball.launched) {
+    ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(200,220,255,0.65)'; ctx.font = '13px "Courier New"';
+    ctx.fillText('スペース / Aボタン / クリックで発射', W/2, H - 10); ctx.textAlign = 'left';
+  }
+  ctx.restore(); drawScanlines();
+}
+
+initGame();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
