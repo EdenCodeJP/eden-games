@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invader Breaker</title>
+  <title>Anivader Breaker</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -34,16 +34,16 @@
 </head>
 <body>
 <canvas id="c" width="600" height="720"></canvas>
-<div id="credit">© 2026 EdenCode (edencode.jp) — InvaderBreaker</div>
+<div id="credit">© 2026 EdenCode (edencode.jp) — AnivaderBreaker</div>
 <script>
 /**
  * ========================================
- *  InvaderBreaker
+ *  AnivaderBreaker
  *  © 2026 EdenCode (edencode.jp)
  * ----------------------------------------
  *  Author  : Edeny / EdenCode
  *  Created : 2026-03-18
- *  URL     : invaderbreaker.vercel.app
+ *  URL     : anivaderbreaker.vercel.app
  * ========================================
  *  Created with Claude Code (Anthropic)
  *  All rights reserved.
@@ -194,44 +194,88 @@ function playBossDie() {
 }
 
 // ─── Sprites ──────────────────────────────────────────────────────────────────
+// ─── Original animal-alien sprites (12×10, PIX=4 → 48×40 on screen) ──────────
+// pixel values: 0=transparent, 1=main color, 2=sub color (face/belly), 3=accent (dark details)
+// Type A "Neko-jin"  : cat alien — 1=body, 2=white face, 3=dark eyes/whiskers
+// Type B "Usa-jin"   : rabbit alien — 1=body, 2=inner ear/face, 3=dark eyes/nose
+// Type C "Kuma-jin"  : bear alien — 1=body, 2=cream belly, 3=dark eyes/nose
+const SPR_COLORS = {
+  A: ['#ffffff', '#221100'],   // [sub=white face, accent=dark]
+  B: ['#ffccdd', '#331100'],   // [sub=light pink ear/face, accent=dark]
+  C: ['#fff0cc', '#331100'],   // [sub=cream belly, accent=dark]
+};
 const SPR = {
   A: [
-    [[0,0,1,0,0,0,0,0,1,0,0],[0,0,0,1,0,0,0,1,0,0,0],[0,0,1,1,1,1,1,1,1,0,0],[0,1,1,0,1,1,1,0,1,1,0],[1,1,1,1,1,1,1,1,1,1,1],[1,0,1,1,1,1,1,1,1,0,1],[1,0,1,0,0,0,0,0,1,0,1],[0,0,0,1,1,0,1,1,0,0,0]],
-    [[0,0,1,0,0,0,0,0,1,0,0],[1,0,0,1,0,0,0,1,0,0,1],[1,0,1,1,1,1,1,1,1,0,1],[1,1,1,0,1,1,1,0,1,1,1],[1,1,1,1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1,1,1,0],[0,0,1,0,0,0,0,0,1,0,0],[0,1,0,0,0,0,0,0,0,1,0]]
+    // Neko-jin frame1: ears up, feet apart
+    [[1,0,0,0,0,0,0,0,0,0,0,1],[1,1,0,0,0,0,0,0,0,0,1,1],[0,1,1,1,1,1,1,1,1,1,1,0],[0,1,2,2,2,2,2,2,2,2,1,0],[0,1,2,3,2,2,2,2,3,2,1,0],[0,1,2,2,2,2,2,2,2,2,1,0],[1,0,3,2,2,3,3,2,2,3,0,1],[0,1,2,2,2,2,2,2,2,2,1,0],[0,1,0,0,0,0,0,0,0,0,1,0],[0,0,0,0,0,0,0,0,0,0,0,0]],
+    // Neko-jin frame2: ears twitch, feet wider
+    [[0,1,0,0,0,0,0,0,0,0,1,0],[1,1,0,0,0,0,0,0,0,0,1,1],[0,1,1,1,1,1,1,1,1,1,1,0],[0,1,2,2,2,2,2,2,2,2,1,0],[0,1,2,3,2,2,2,2,3,2,1,0],[0,1,2,2,2,2,2,2,2,2,1,0],[1,0,3,2,2,3,3,2,2,3,0,1],[0,1,2,2,2,2,2,2,2,2,1,0],[1,0,0,0,0,0,0,0,0,0,0,1],[0,0,0,0,0,0,0,0,0,0,0,0]]
   ],
   B: [
-    [[0,1,0,0,0,0,0,0,1,0],[0,0,1,0,0,0,1,0,0,0],[0,1,1,1,1,1,1,1,1,0],[1,1,0,1,1,1,1,0,1,1],[1,1,1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1,1,0],[0,1,0,0,0,0,0,0,1,0],[0,0,1,0,0,1,0,1,0,0]],
-    [[0,1,0,0,0,0,0,0,1,0],[1,0,0,1,0,0,1,0,0,1],[1,0,1,1,1,1,1,1,0,1],[1,1,0,1,1,1,1,0,1,1],[1,1,1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1,1,0],[0,0,1,0,0,0,0,1,0,0],[0,1,0,0,0,0,0,0,1,0]]
+    // Usa-jin frame1: ears straight up
+    [[0,0,1,1,0,0,0,0,1,1,0,0],[0,0,1,2,0,0,0,0,2,1,0,0],[0,1,1,2,0,0,0,0,2,1,1,0],[0,1,1,1,1,1,1,1,1,1,1,0],[0,1,1,1,1,1,1,1,1,1,1,0],[0,1,2,2,3,2,2,3,2,2,1,0],[0,1,1,1,1,1,1,1,1,1,1,0],[0,0,1,1,2,3,3,2,1,1,0,0],[0,0,1,0,0,0,0,0,0,1,0,0],[0,0,0,0,0,0,0,0,0,0,0,0]],
+    // Usa-jin frame2: ears lean in
+    [[0,0,0,1,1,0,0,1,1,0,0,0],[0,0,1,1,2,0,0,2,1,1,0,0],[0,0,1,1,2,0,0,2,1,1,0,0],[0,1,1,1,1,1,1,1,1,1,1,0],[0,1,1,1,1,1,1,1,1,1,1,0],[0,1,2,2,3,2,2,3,2,2,1,0],[0,1,1,1,1,1,1,1,1,1,1,0],[0,0,1,1,2,3,3,2,1,1,0,0],[0,1,0,0,0,0,0,0,0,0,1,0],[0,0,0,0,0,0,0,0,0,0,0,0]]
   ],
   C: [
-    [[0,0,0,1,1,1,1,0,0,0],[0,1,1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1,1,1],[1,1,0,1,1,1,1,0,1,1],[1,1,1,1,1,1,1,1,1,1],[0,1,1,0,0,0,0,1,1,0],[0,0,1,0,1,0,1,0,1,0],[0,1,0,0,0,0,0,0,0,1]],
-    [[0,0,0,1,1,1,1,0,0,0],[0,1,1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1,1,1],[1,1,0,1,1,1,1,0,1,1],[1,1,1,1,1,1,1,1,1,1],[0,0,1,1,0,0,1,1,0,0],[0,1,0,1,1,1,1,0,1,0],[1,0,1,0,0,0,0,1,0,1]]
+    // Kuma-jin frame1: round ears, feet apart
+    [[0,1,1,0,0,0,0,0,0,1,1,0],[1,1,1,1,1,1,1,1,1,1,1,1],[1,1,2,2,2,2,2,2,2,2,1,1],[1,1,2,3,2,2,2,2,3,2,1,1],[1,1,2,2,2,2,2,2,2,2,1,1],[1,1,2,2,2,2,2,2,2,2,1,1],[0,1,2,2,3,2,2,3,2,2,1,0],[0,1,1,1,2,2,2,2,1,1,1,0],[0,1,0,0,0,1,1,0,0,0,1,0],[0,0,0,0,0,0,0,0,0,0,0,0]],
+    // Kuma-jin frame2: feet shifted
+    [[0,1,1,0,0,0,0,0,0,1,1,0],[1,1,1,1,1,1,1,1,1,1,1,1],[1,1,2,2,2,2,2,2,2,2,1,1],[1,1,2,3,2,2,2,2,3,2,1,1],[1,1,2,2,2,2,2,2,2,2,1,1],[1,1,2,2,2,2,2,2,2,2,1,1],[0,1,2,2,3,2,2,3,2,2,1,0],[0,1,1,1,2,2,2,2,1,1,1,0],[1,0,0,0,0,1,1,0,0,0,0,1],[0,0,0,0,0,0,0,0,0,0,0,0]]
   ]
 };
 
+// UFO "Nyan-Ship": cute cat-eared spaceship (12×6)
+// 1=hot-pink body, 2=gold cockpit/windows, 3=dark detail
 const UFO_SPR = [
-  [0,0,0,1,1,1,1,1,1,0,0,0],
-  [0,1,1,1,1,1,1,1,1,1,1,0],
-  [1,1,0,1,0,1,1,0,1,0,1,1],
+  [1,1,0,0,0,0,0,0,0,0,1,1],
+  [1,1,0,0,2,2,2,2,0,0,1,1],
+  [0,1,1,2,2,2,2,2,2,1,1,0],
   [1,1,1,1,1,1,1,1,1,1,1,1],
-  [0,1,1,0,1,1,1,1,0,1,1,0],
-  [0,0,1,0,0,0,0,0,0,1,0,0],
+  [1,1,3,1,1,1,1,1,1,3,1,1],
+  [0,0,0,1,2,0,0,2,1,0,0,0],
 ];
+const UFO_COLORS = ['#ff44aa', '#ffee44', '#220011'];
 const UFO_PIX = 5, UFO_W = UFO_SPR[0].length * UFO_PIX, UFO_H = UFO_SPR.length * UFO_PIX;
 const UFO_Y = 42, UFO_POINTS = [100, 150, 200, 300, 500];
 
-// ─── Giant Boss Sprite (16×10 px, scale 7 = 112×70) ──────────────────────────
+// ─── Boss Sprites (16×10 px, scale 7 = 112×70) ───────────────────────────────
+// 1=main body, 2=bright (eyes/belly), 3=dark detail
+
+// Buffalo boss (gameplay)
+// 1=golden body, 2=cream highlights (eyes/snout), 3=dark (hooves/nostrils)
 const BOSS_SPR = [
-  [0,0,0,1,0,0,1,1,1,1,0,0,1,0,0,0],
+  [1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+  [0,1,1,0,0,0,0,0,0,0,0,0,0,1,1,0],
   [0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
-  [0,1,1,0,1,1,1,1,1,1,1,1,0,1,1,0],
-  [1,1,0,1,1,0,1,1,1,1,0,1,1,0,1,1],
+  [0,0,1,2,2,1,1,1,1,1,1,2,2,1,0,0],
+  [0,0,1,1,1,2,3,2,2,3,2,1,1,1,0,0],
+  [0,1,1,1,1,1,1,2,2,1,1,1,1,1,1,0],
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,0,1,1,0,1,1,0,0,1,1,0,1,1,0,1],
-  [1,0,0,1,0,0,0,1,1,0,0,0,1,0,0,1],
+  [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
   [0,1,0,0,1,0,0,1,1,0,0,1,0,0,1,0],
+  [0,3,0,0,3,0,0,0,0,0,0,3,0,0,3,0],
+];
+// Dragon boss (title screen decoration only)
+const DRAGON_SPR = [
   [0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0],
+  [0,0,1,1,0,0,0,0,0,0,0,0,1,1,0,0],
+  [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+  [1,0,1,2,2,1,1,1,1,1,1,2,2,1,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,2,1,1,1,1,2,1,1,1,1,1],
+  [0,1,1,1,1,2,2,1,1,2,2,1,1,1,1,0],
+  [0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+  [0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+];
+const DRAGON_COLORS = ['#aa44ff', '#ff88ff', '#110033'];
+
+// ダメージ段階ごとの色: [main, bright, dark]
+const BOSS_STAGE_COLORS = [
+  ['#cc8833', '#ffe888', '#331100'],  // stage 0: full (golden brown)
+  ['#ff8800', '#ffee44', '#221100'],  // stage 1: damaged (orange)
+  ['#ff2200', '#ff8800', '#220000'],  // stage 2: critical (red)
 ];
 const BOSS_PIX = 7;
 const BOSS_W = BOSS_SPR[0].length * BOSS_PIX; // 112
@@ -244,7 +288,7 @@ const ROW_CFG = [
   ['C', '#ff3366', 345], ['B', '#ff8800', 28], ['B', '#ffee00', 55], ['A', '#44ff88', 145], ['A', '#33aaff', 210],
 ];
 const ROWS = 5, COLS = 9;
-const IW = 44, IH = 32, PX = 14, PY = 16, PIX = 3;
+const IW = 54, IH = 46, PX = 6, PY = 4, PIX = 4;
 const GRID_X = (W - COLS * (IW + PX) + PX) / 2;
 const GRID_Y = 72;
 
@@ -769,14 +813,17 @@ function drawInvaders() {
         }
       }
     } else {
-      // 通常インベーダー: 単色
+      // 通常インベーダー: 3色パレット
       const glow = 8 + 3 * Math.abs(Math.sin(t * 1.5 + inv.col * 0.4));
-      ctx.fillStyle = inv.color;
       ctx.shadowColor = inv.color;
       ctx.shadowBlur = glow;
+      const palette = [null, inv.color, SPR_COLORS[inv.type][0], SPR_COLORS[inv.type][1]];
       for (let r = 0; r < spr.length; r++)
-        for (let c = 0; c < spr[r].length; c++)
-          if (spr[r][c]) ctx.fillRect(ox + c*PIX, oy + r*PIX, PIX, PIX);
+        for (let c = 0; c < spr[r].length; c++) {
+          const v = spr[r][c]; if (!v) continue;
+          ctx.fillStyle = palette[v];
+          ctx.fillRect(ox + c*PIX, oy + r*PIX, PIX, PIX);
+        }
     }
     ctx.shadowBlur = 0;
   }
@@ -787,26 +834,26 @@ function drawBoss() {
   ctx.save(); ctx.globalAlpha = alpha;
   const t = Date.now() / 1000;
 
-  // 段階ごとの基本色: フル=シアン系, 中破=オレンジ, 大破=赤
-  const stageHue = [boss.hue, 25, 0][boss.damageStage];
-  const col = boss.hitFlash > 0.5 ? '#ffffff' : `hsl(${stageHue},100%,${boss.damageStage === 2 ? 55 : 60}%)`;
-  ctx.fillStyle = col; ctx.shadowColor = col;
+  const stageColors = BOSS_STAGE_COLORS[boss.damageStage];
+  const palette = boss.hitFlash > 0.5
+    ? ['#ffffff', '#ffffff', '#ffffff']
+    : stageColors;
+  ctx.shadowColor = palette[0];
   ctx.shadowBlur = 20 + 8 * Math.abs(Math.sin(t * 3));
 
   for (let r = 0; r < BOSS_SPR.length; r++) {
     for (let c = 0; c < BOSS_SPR[r].length; c++) {
-      if (!BOSS_SPR[r][c]) continue;
+      const v = BOSS_SPR[r][c]; if (!v) continue;
       if (boss.brokenPixels.has(r * 16 + c)) {
-        // 吹き飛んだピクセル: 消えかけの煙エフェクト（まれに小さい点）
         if (Math.random() < 0.04) {
           ctx.globalAlpha = alpha * 0.3 * Math.random();
           ctx.fillStyle = '#ff6600';
           ctx.fillRect(boss.x + c*BOSS_PIX + Math.random()*4-2, boss.y + r*BOSS_PIX + Math.random()*4-2, 3, 3);
-          ctx.globalAlpha = alpha;
-          ctx.fillStyle = col;
+          ctx.globalAlpha = alpha; ctx.fillStyle = palette[v - 1];
         }
         continue;
       }
+      ctx.fillStyle = palette[v - 1];
       ctx.fillRect(boss.x + c*BOSS_PIX, boss.y + r*BOSS_PIX, BOSS_PIX, BOSS_PIX);
     }
   }
@@ -846,7 +893,7 @@ function drawBossWarning() {
   ctx.fillText('⚠ WARNING ⚠', W/2, H/2 - 20);
   ctx.font = 'bold 17px "Courier New"';
   ctx.fillStyle = '#ff4444'; ctx.shadowColor = '#ff0000';
-  ctx.fillText('GIANT INVADER INCOMING!', W/2, H/2 + 20);
+  ctx.fillText('GIANT ANIVADER INCOMING!', W/2, H/2 + 20);
   ctx.shadowBlur = 0; ctx.textAlign = 'left';
 }
 function drawBossProjectiles() {
@@ -912,11 +959,13 @@ function drawBall() {
 }
 function drawUfo() {
   if (!ufo) return;
-  const color = `hsl(${ufo.hue},100%,65%)`;
-  ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 22;
+  ctx.shadowColor = UFO_COLORS[0]; ctx.shadowBlur = 22;
   for (let r = 0; r < UFO_SPR.length; r++)
-    for (let c = 0; c < UFO_SPR[r].length; c++)
-      if (UFO_SPR[r][c]) ctx.fillRect(ufo.x + c*UFO_PIX, ufo.y + r*UFO_PIX, UFO_PIX, UFO_PIX);
+    for (let c = 0; c < UFO_SPR[r].length; c++) {
+      const v = UFO_SPR[r][c]; if (!v) continue;
+      ctx.fillStyle = UFO_COLORS[v - 1];
+      ctx.fillRect(ufo.x + c*UFO_PIX, ufo.y + r*UFO_PIX, UFO_PIX, UFO_PIX);
+    }
   ctx.shadowBlur = 0;
 }
 function drawParticles() {
@@ -943,28 +992,38 @@ function drawFlash() {
   ctx.fillRect(0, 0, W, H);
 }
 function drawHUD() {
-  ctx.font = 'bold 16px "Courier New"'; ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 6;
-  ctx.fillStyle = '#00ffff';
-  ctx.textAlign = 'left';  ctx.fillText(`SCORE: ${score}`, 12, 25);
-  ctx.textAlign = 'center'; ctx.fillText(`LEVEL ${level}`, W/2, 25);
-  ctx.shadowBlur = 0;
-  // ライフ表示：右端から左へ並べる
-  for (let i = 0; i < lives; i++) drawSprite(W - 28 - i * 22, 12, 'B', '#00ffff', 0, 2);
-  // 光りインベーダー進捗 ★☆☆
-  ctx.font = 'bold 13px "Courier New"';
-  ctx.textAlign = 'left';
   const t = Date.now() / 1000;
+  ctx.textAlign = 'left';
+
+  // ⭐ SCORE（左・ゴールド）
+  ctx.font = 'bold 15px Arial'; ctx.fillStyle = '#ffdd44';
+  ctx.shadowColor = '#ff8800'; ctx.shadowBlur = 8;
+  ctx.fillText(`⭐ ${score}`, 12, 25);
+
+  // ♪ LEVEL（中央・ミント）
+  ctx.textAlign = 'center'; ctx.fillStyle = '#88ffcc';
+  ctx.shadowColor = '#00cc88'; ctx.shadowBlur = 8;
+  ctx.fillText(`♪ LV.${level}`, W/2, 25);
+  ctx.shadowBlur = 0;
+
+  // ライフ表示：右端からウサギアイコン・ピンク（scale=2 → 24×20px, 間隔26px）
+  for (let i = 0; i < lives; i++) drawSprite(W - 30 - i * 26, 8, 'B', '#ff88cc', 0, 2);
+
+  // 光りインベーダー進捗 ★☆☆（左下）
+  ctx.font = 'bold 14px Arial'; ctx.textAlign = 'left';
   for (let i = 0; i < SHINE_NEED; i++) {
     if (i < shineKills) {
       const hue = (t * 120 + i * 40) % 360;
       ctx.fillStyle = `hsl(${hue|0},100%,65%)`; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
     } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,200,220,0.3)'; ctx.shadowBlur = 0;
     }
     ctx.fillText('★', 14 + i * 18, H - 10);
   }
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(0,255,255,0.2)'; ctx.lineWidth = 1;
+
+  // 区切り線（ピンク系）
+  ctx.strokeStyle = 'rgba(255,150,200,0.25)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, 33); ctx.lineTo(W, 33); ctx.stroke();
 }
 // ─── Title screen demo state ──────────────────────────────────────────────────
@@ -1097,32 +1156,20 @@ function drawTitle() {
 
   // ─── UFO ─────────────────────────────────────────
   if (_td.ufoOn) {
-    const uc = `hsl(${_td.ufoHue},100%,65%)`;
-    ctx.fillStyle = uc; ctx.shadowColor = uc; ctx.shadowBlur = 22;
+    ctx.shadowColor = UFO_COLORS[0]; ctx.shadowBlur = 22;
     for (let r = 0; r < UFO_SPR.length; r++)
-      for (let c = 0; c < UFO_SPR[r].length; c++)
-        if (UFO_SPR[r][c]) ctx.fillRect(_td.ufoX + c*UFO_PIX, 52 + r*UFO_PIX, UFO_PIX, UFO_PIX);
+      for (let c = 0; c < UFO_SPR[r].length; c++) {
+        const v = UFO_SPR[r][c]; if (!v) continue;
+        ctx.fillStyle = UFO_COLORS[v - 1];
+        ctx.fillRect(_td.ufoX + c*UFO_PIX, 52 + r*UFO_PIX, UFO_PIX, UFO_PIX);
+      }
     // UFOスコア表示
     const pts = UFO_POINTS[Math.floor(_td.ufoHue/72) % UFO_POINTS.length];
-    ctx.font = 'bold 11px "Courier New"'; ctx.fillStyle = uc;
+    ctx.font = 'bold 11px "Courier New"'; ctx.fillStyle = UFO_COLORS[0];
     ctx.fillText(`${pts}pts`, _td.ufoX + UFO_W/2, 48);
     ctx.shadowBlur = 0;
   }
 
-  // ─── タイトル枠（シアン枠 + コーナーブラケット） ─────────
-  ctx.strokeStyle = 'rgba(0,255,255,0.35)';
-  ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 8; ctx.lineWidth = 1;
-  ctx.strokeRect(22, 100, W - 44, 126); ctx.shadowBlur = 0;
-  // 四隅ブラケット
-  const bSize = 14;
-  ctx.lineWidth = 2.5; ctx.strokeStyle = '#00ffff';
-  ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 14;
-  [[22,100,1,1],[W-22,100,-1,1],[22,226,1,-1],[W-22,226,-1,-1]].forEach(([x,y,sx,sy]) => {
-    ctx.beginPath();
-    ctx.moveTo(x, y + sy*bSize); ctx.lineTo(x, y); ctx.lineTo(x + sx*bSize, y);
-    ctx.stroke();
-  });
-  ctx.shadowBlur = 0;
 
   // ─── タイトルテキスト ────────────────────────────────
   ctx.font = 'bold 48px "Courier New"';
@@ -1133,12 +1180,12 @@ function drawTitle() {
     const th2 = (th1 + 55) % 360;
     ctx.fillStyle = `hsl(${th1},100%,68%)`; ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 28 + 10 * tf;
-    ctx.fillText('INVADER', W/2, 162);
+    ctx.fillText('ANIVADER', W/2, 162);
     ctx.fillStyle = `hsl(${th2},100%,68%)`; ctx.shadowColor = ctx.fillStyle;
     ctx.fillText('BREAKER', W/2, 210);
   } else {
     ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 28;
-    ctx.fillText('INVADER', W/2, 162);
+    ctx.fillText('ANIVADER', W/2, 162);
     ctx.fillText('BREAKER', W/2, 210);
   }
   ctx.shadowBlur = 0;
@@ -1153,12 +1200,52 @@ function drawTitle() {
       const gh = (inv.baseHue + t * 200) % 360;
       ctx.fillStyle = `hsl(${gh},100%,68%)`;
       ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 16;
+      ctx.shadowBlur = 0;
     } else {
-      ctx.fillStyle = inv.color; ctx.shadowBlur = 0;
+      ctx.shadowBlur = 0;
+      const palette = [null, inv.color, SPR_COLORS[inv.type][0], SPR_COLORS[inv.type][1]];
+      for (let r = 0; r < spr.length; r++)
+        for (let c = 0; c < spr[r].length; c++) {
+          const v = spr[r][c]; if (!v) continue;
+          ctx.fillStyle = palette[v];
+          ctx.fillRect(ox+c*PIX, oy+r*PIX, PIX, PIX);
+        }
+      ctx.shadowBlur = 0;
+      continue;
     }
     for (let r = 0; r < spr.length; r++)
       for (let c = 0; c < spr[r].length; c++)
         if (spr[r][c]) ctx.fillRect(ox+c*PIX, oy+r*PIX, PIX, PIX);
+    ctx.shadowBlur = 0;
+  }
+
+  // ─── タイトル横ボスキャラ（タイトルテキストの左右） ─────
+  {
+    const BP = 5;
+    const BW = BOSS_SPR[0].length * BP, BH = BOSS_SPR.length * BP;
+    const bossY = 90;
+    const pulse = 0.7 + 0.3 * Math.abs(Math.sin(t * 2));
+    // Buffalo（左）
+    ctx.shadowColor = BOSS_STAGE_COLORS[0][0]; ctx.shadowBlur = 16 * pulse;
+    for (let r = 0; r < BOSS_SPR.length; r++)
+      for (let c = 0; c < BOSS_SPR[r].length; c++) {
+        const v = BOSS_SPR[r][c]; if (!v) continue;
+        ctx.fillStyle = BOSS_STAGE_COLORS[0][v - 1];
+        ctx.fillRect(40 + c*BP, bossY + r*BP, BP, BP);
+      }
+    ctx.font = 'bold 10px Arial'; ctx.fillStyle = BOSS_STAGE_COLORS[0][0];
+    ctx.textAlign = 'center';
+    ctx.fillText('BUFFALO', 40 + BW/2, bossY + BH + 12);
+    // Dragon（右）
+    ctx.shadowColor = DRAGON_COLORS[0]; ctx.shadowBlur = 16 * pulse;
+    for (let r = 0; r < DRAGON_SPR.length; r++)
+      for (let c = 0; c < DRAGON_SPR[r].length; c++) {
+        const v = DRAGON_SPR[r][c]; if (!v) continue;
+        ctx.fillStyle = DRAGON_COLORS[v - 1];
+        ctx.fillRect(W - 40 - BW + c*BP, bossY + r*BP, BP, BP);
+      }
+    ctx.fillStyle = DRAGON_COLORS[0];
+    ctx.fillText('DRAGON', W - 40 - BW + BW/2, bossY + BH + 12);
     ctx.shadowBlur = 0;
   }
 
@@ -1179,18 +1266,25 @@ function drawTitle() {
 function drawGameOver() {
   const t = Date.now() / 1000;
   ctx.textAlign = 'center';
-  ctx.font = 'bold 56px "Courier New"'; ctx.fillStyle = '#ff2244';
-  ctx.shadowColor = '#ff0033'; ctx.shadowBlur = 28;
+  // タイトル
+  ctx.font = 'bold 56px Arial'; ctx.fillStyle = '#ff4488';
+  ctx.shadowColor = '#ff0055'; ctx.shadowBlur = 28;
   ctx.fillText('GAME OVER', W/2, 280); ctx.shadowBlur = 0;
-  ctx.font = '28px "Courier New"'; ctx.fillStyle = '#ffffff'; ctx.fillText(`SCORE: ${score}`, W/2, 335);
-  ctx.font = '18px "Courier New"'; ctx.fillStyle = '#aaaacc'; ctx.fillText(`LEVEL: ${level}`, W/2, 368);
+  // スコア（ゴールド）
+  ctx.font = 'bold 26px Arial'; ctx.fillStyle = '#ffdd44';
+  ctx.shadowColor = '#ff8800'; ctx.shadowBlur = 10;
+  ctx.fillText(`⭐ ${score}`, W/2, 335); ctx.shadowBlur = 0;
+  // レベル（ミント）
+  ctx.font = '18px Arial'; ctx.fillStyle = '#88ffcc';
+  ctx.fillText(`♪ LV.${level}`, W/2, 368);
+  // リトライ（点滅・シアン）
   if (Math.floor(t * 1.6) % 2 === 0) {
-    ctx.font = 'bold 18px "Courier New"'; ctx.fillStyle = '#00ffff';
-    ctx.shadowColor = '#00ffff'; ctx.shadowBlur = 12;
-    ctx.fillText('SPACE / クリックでリトライ', W/2, 430); ctx.shadowBlur = 0;
+    ctx.font = 'bold 18px Arial'; ctx.fillStyle = '#ff88cc';
+    ctx.shadowColor = '#ff44aa'; ctx.shadowBlur = 12;
+    ctx.fillText('▶ SPACE / クリックでリトライ！', W/2, 430); ctx.shadowBlur = 0;
   }
-  ctx.font = '12px "Courier New"'; ctx.fillStyle = 'rgba(160,160,200,0.7)';
-  ctx.fillText('© Edeny / EdenCode', W/2, H - 14);
+  ctx.font = '12px Arial'; ctx.fillStyle = 'rgba(200,160,180,0.7)';
+  ctx.fillText('© 2026 EdenCode (edencode.jp) — AnivaderBreaker', W/2, H - 14);
   ctx.textAlign = 'left';
 }
 
