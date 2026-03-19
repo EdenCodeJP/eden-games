@@ -241,6 +241,34 @@ const PELLET_SCORE = 50;
 const GHOST_SCORE_BASE = 200;
 const POWER_DURATION = 900; // frames
 const GHOST_HOME_ROW = 4;
+
+// ─── Audio ────────────────────────────────────────────────────────────────────
+let _ac = null;
+function ac() {
+  if (!_ac) _ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (_ac.state === 'suspended') _ac.resume();
+  return _ac;
+}
+function tone(freq, type, t, dur, vol=0.28, endFreq=null) {
+  const ctx = ac();
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.connect(g); g.connect(ctx.destination);
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.start(t); o.stop(t + dur + 0.01);
+}
+let _dotFlip = 0;
+function sfxDot()    { const t = ac().currentTime; tone(_dotFlip ? 330 : 260, 'square', t, 0.055, 0.18); _dotFlip ^= 1; }
+function sfxPellet() { const t = ac().currentTime; [440,554,659,880].forEach((f,i) => tone(f,'sine',t+i*0.07,0.13,0.30)); }
+function sfxEatGhost(){ const t = ac().currentTime; [880,660,440,220].forEach((f,i) => tone(f,'square',t+i*0.05,0.07,0.22)); }
+function sfxDie()    { const t = ac().currentTime; tone(440,'sawtooth',t,1.0,0.30,55); tone(220,'sawtooth',t+0.1,0.9,0.18,40); }
+function sfxLevelUp(){ const t = ac().currentTime; [330,392,494,659,784,988].forEach((f,i) => tone(f,'triangle',t+i*0.09,0.16,0.28)); }
+function sfxGameOver(){ const t = ac().currentTime; [392,330,294,220,175].forEach((f,i) => tone(f,'sine',t+i*0.18,0.22,0.30)); }
+function sfxStart()  { const t = ac().currentTime; [330,392,440,523,659].forEach((f,i) => tone(f,'triangle',t+i*0.07,0.12,0.25)); }
 const GHOST_HOME_COL = 6;
 
 // ─── Maze ────────────────────────────────────────────────────────────────────
@@ -476,18 +504,21 @@ function startGame() {
   stateTimer = 0;
   setMsg('');
   updateHUD();
+  sfxStart();
 }
 
 function levelUp() {
   state = 'levelup';
   stateTimer = 0;
   setMsg('LEVEL CLEAR!  🥷', false);
+  sfxLevelUp();
 }
 
 function gameOver() {
   state = 'gameover';
   stateTimer = 0;
   setMsg('GAME OVER', true);
+  sfxGameOver();
 }
 
 // ─── HUD ─────────────────────────────────────────────────────────────────────
@@ -594,6 +625,7 @@ function updatePlayer() {
     score += DOT_SCORE;
     spawnParticles(player.px, player.py, '#ffe000', 6);
     updateHUD();
+    sfxDot();
   } else if (cell === 3) {
     maze[player.row][player.col] = 2;
     dots--;
@@ -603,6 +635,7 @@ function updatePlayer() {
     ghosts.forEach(g => { if (!g.inHome && !g.eaten) g.scared = true; });
     spawnParticles(player.px, player.py, '#00ffff', 14);
     updateHUD();
+    sfxPellet();
   }
 }
 
@@ -774,6 +807,7 @@ function checkCollisions() {
         // Return ghost to home
         setTimeout(() => respawnGhost(g), 2000);
         updateHUD();
+        sfxEatGhost();
       } else {
         // Player dies
         killPlayer();
@@ -811,6 +845,7 @@ function killPlayer() {
   spawnParticles(player.px, player.py, '#ffe000', 30);
   updateHUD();
   setMsg('');
+  sfxDie();
 }
 
 // ─── Particles ────────────────────────────────────────────────────────────────
