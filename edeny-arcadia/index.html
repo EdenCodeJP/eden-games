@@ -1084,8 +1084,10 @@ function drawBattle() {
   ctx.fillStyle='#aa88cc'; ctx.font='12px "Courier New"';
   ctx.textAlign='right'; ctx.fillText(`${bt.enemyHp}/${bt.enemyMaxHp}`,CW-28,42); ctx.textAlign='left';
 
-  // Boss character
-  drawBoss(bt.flashEnemy);
+  // Boss character（勝利ダイアログ中は消す）
+  if (bt.phase !== 'victory_dialog') {
+    drawBoss(bt.flashEnemy);
+  }
   drawFloatTexts();
 
   // player area
