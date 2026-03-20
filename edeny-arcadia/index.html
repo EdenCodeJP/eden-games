@@ -34,7 +34,7 @@ const ctx = canvas.getContext('2d');
 const CW = 640, CH = 480, TS = 32;
 
 // ─── Tile IDs ─────────────────────────────────────────────────────────────────
-const T = { GRASS:0, TREE:1, PATH:2, WALL:3, DOOR:4, CHEST:5, POT:6, ONIGIRI:7, SIGN:8, FLOWER:9, STAIR:11, ITEM_A:12, ITEM_B:13, ITEM_C:14, CWALL:16 };
+const T = { GRASS:0, TREE:1, PATH:2, WALL:3, DOOR:4, CHEST:5, POT:6, ONIGIRI:7, SIGN:8, FLOWER:9, CAVE:10, STAIR:11, ITEM_A:12, ITEM_B:13, ITEM_C:14, CWALL:16 };
 const WALKABLE = new Set([0, 2, 4, 9]);
 
 // ─── Map (20 cols × 24 rows) ──────────────────────────────────────────────────
@@ -150,6 +150,7 @@ let chapter = 1;
 let currentMap = 'field'; // field|dungeon
 let dungeonItems = new Set(); // 'A','B','C'
 let dungeonBossTriggered = false;
+let dungeonVisited = false;
 let battleType = 'shadow'; // shadow|golem
 
 function getMap() { return currentMap === 'dungeon' ? DUNGEON_MAP : MAP; }
@@ -455,6 +456,14 @@ function checkInteract() {
       {speaker:'CLANA', col:'#9966ff', text:'弁償してあげてください……。'},
     ], checkBossTrigger);
   } else if (tile === T.SIGN) {
+    if (chapter === 2) {
+      runScript([
+        {speaker:'EDENY', col:'#ff8c40', text:'「EDEN PARK 建設予定地」……変わらんな。'},
+        {speaker:'CLANA', col:'#9966ff', text:'変わりますよ。私たちが作りますから。'},
+        {speaker:'EDENY', col:'#ff8c40', text:'ほな次の仕事や。'},
+      ], null);
+      return;
+    }
     runScript([
       {speaker:'EDENY', col:'#ff8c40', text:'……倒したな。'},
       {speaker:'CLANA', col:'#9966ff', text:'倒しましたね。……意外と、あっさり。'},
@@ -477,6 +486,12 @@ function checkInteract() {
       {speaker:'EDENY', col:'#ff8c40', text:'おっ、おにぎり！　誰が置いたんやろ。'},
       {speaker:'CLANA', col:'#9966ff', text:'エデニー、やめてください！　地面がっ──'},
       {speaker:'', col:'#aaaaaa', text:'ズドーン！！'},
+    ], () => fadeOut(() => enterDungeon()));
+  } else if (tile === T.CAVE) {
+    runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'さっき落ちた穴や。'},
+      {speaker:'CLANA', col:'#9966ff', text:'降りますか？　残り素材 ' + (3-dungeonItems.size) + ' 個です。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'行くで。'},
     ], () => fadeOut(() => enterDungeon()));
   } else if (tile === T.STAIR) {
     const rem = 3 - dungeonItems.size;
@@ -545,28 +560,37 @@ function enterDungeon() {
   clana.tx=9;  clana.ty=4;  clana.dx=9*TS;  clana.dy=4*TS;
   updateCamera();
   startBgm('dungeon');
-  runScript([
-    {speaker:'EDENY', col:'#ff8c40', text:'……痛っ。何やここ、暗い洞窟やんか。'},
-    {speaker:'CLANA', col:'#9966ff', text:'地下遺跡ですね。「古代遺跡の祠」……古い地図に載ってました。'},
-    {speaker:'EDENY', col:'#ff8c40', text:'なんで黙ってたんや！'},
-    {speaker:'CLANA', col:'#9966ff', text:'言う前に落ちたんです。おにぎりのせいで。'},
-    {speaker:'EDENY', col:'#ff8c40', text:'……宝はあるんか？'},
-    {speaker:'CLANA', col:'#9966ff', text:'素材が3つ眠ってるはずです。楽園の材料になります。'},
-    {speaker:'EDENY', col:'#ff8c40', text:'ほな拾って帰るで。'},
-  ], null);
+  if (!dungeonVisited) {
+    dungeonVisited = true;
+    runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'……痛っ。何やここ、暗い洞窟やんか。'},
+      {speaker:'CLANA', col:'#9966ff', text:'地下遺跡ですね。「古代遺跡の祠」……古い地図に載ってました。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'なんで黙ってたんや！'},
+      {speaker:'CLANA', col:'#9966ff', text:'言う前に落ちたんです。おにぎりのせいで。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'……宝はあるんか？'},
+      {speaker:'CLANA', col:'#9966ff', text:'素材が3つ眠ってるはずです。楽園の材料になります。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'ほな拾って帰るで。'},
+    ], null);
+  } else {
+    runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'また来たで。残り素材 ' + (3-dungeonItems.size) + ' 個や。'},
+      {speaker:'CLANA', col:'#9966ff', text:'行きましょう。奥に何かいるはずです。'},
+    ], null);
+  }
 }
 
 function exitDungeon() {
   fadeOut(() => {
     currentMap = 'field';
+    MAP[21][9] = T.CAVE; // 洞窟の入り口を残す（再入場できるように）
     player.tx=9; player.ty=20; player.dx=9*TS; player.dy=20*TS; player.dir=0;
-    clana.tx=9;  clana.ty=21;  clana.dx=9*TS;  clana.dy=21*TS;
+    clana.tx=9;  clana.ty=20;  clana.dx=9*TS;  clana.dy=20*TS;
     updateCamera();
     startBgm('field');
     runScript([
       {speaker:'EDENY', col:'#ff8c40', text:'……出てきた。地上や。'},
-      {speaker:'CLANA', col:'#9966ff', text:'階段、ちゃんと使えましたね。オッコチストーンのおかげかも。'},
-      {speaker:'EDENY', col:'#ff8c40', text:'何もしてないぞそれ。'},
+      {speaker:'CLANA', col:'#9966ff', text:'洞窟の入り口は残ってます。素材を拾い忘れたら戻れますよ。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'……とりあえずのっぱらの空気が美味い。'},
     ], null);
   });
 }
@@ -691,7 +715,9 @@ function updateBattle() {
         seMagic(); shake(6);
         bt.phase = 'player_attack'; bt.timer = 50;
       } else {
-        bt.log = 'クラナ：「ダメです！英雄になってください！」';
+        bt.log = battleType==='golem'
+          ? 'クラナ：「逃げません！あのゴーレムに決着をつけましょう！」'
+          : 'クラナ：「ダメです！英雄になってください！」';
         beep(330,0.08,0.05,'square'); beep(220,0.12,0.05,'square',0.09);
       }
     }
@@ -754,7 +780,7 @@ function endBattle() {
 function resetGame() {
   gold = 0; bossTriggered = false; bossDefeated = false;
   chapter = 1; currentMap = 'field';
-  dungeonItems = new Set(); dungeonBossTriggered = false; battleType = 'shadow';
+  dungeonItems = new Set(); dungeonBossTriggered = false; dungeonVisited = false; battleType = 'shadow';
   // フィールドマップアイテム復元
   MAP[2][6]   = T.POT;
   MAP[2][17]  = T.CHEST;
@@ -890,6 +916,22 @@ function drawTile(id, px, py) {
       ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.ellipse(px+12,py+14,3,5,0.3,0,Math.PI*2); ctx.fill();
       // sesame
       ctx.fillStyle='#888'; ctx.fillRect(px+14,py+12,2,2);
+      break;
+    case T.CAVE:
+      ctx.fillStyle='#2d5a1b'; ctx.fillRect(px,py,TS,TS);
+      // 影（穴っぽく）
+      ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(px+16,py+22,11,5,0,0,Math.PI*2); ctx.fill();
+      // 洞窟の穴（暗い楕円）
+      ctx.fillStyle='#0a0808'; ctx.beginPath(); ctx.ellipse(px+16,py+20,10,8,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#1a1210'; ctx.beginPath(); ctx.ellipse(px+16,py+20,7,5,0,0,Math.PI*2); ctx.fill();
+      // 入り口フチ（岩）
+      ctx.fillStyle='#5c5040'; ctx.fillRect(px+4,py+14,4,8); ctx.fillRect(px+24,py+14,4,8);
+      ctx.fillRect(px+6,py+10,20,6);
+      ctx.fillStyle='#7a6a50'; ctx.fillRect(px+7,py+11,18,4);
+      // 草が縁に生える
+      ctx.fillStyle='#3a7020'; ctx.fillRect(px+4,py+12,4,3); ctx.fillRect(px+24,py+12,4,3);
+      // 薄い光（外から射し込む感）
+      ctx.fillStyle='rgba(180,220,160,0.18)'; ctx.beginPath(); ctx.ellipse(px+16,py+16,5,3,0,0,Math.PI*2); ctx.fill();
       break;
     case T.CWALL:
       ctx.fillStyle='#1a1410'; ctx.fillRect(px,py,TS,TS);
@@ -1425,8 +1467,8 @@ function drawHud() {
     const ftx=player.tx+off[0], fty=player.ty+off[1];
     if (ftx>=0&&ftx<MCOLS&&fty>=0&&fty<MROWS) {
       const tid=MAP[fty][ftx];
-      if (tid===T.CHEST||tid===T.POT||tid===T.SIGN||tid===T.ONIGIRI) {
-        const label=tid===T.CHEST?'宝箱を開ける':tid===T.POT?'ツボを割る':tid===T.ONIGIRI?'おにぎりを拾う':'看板を読む';
+      if (tid===T.CHEST||tid===T.POT||tid===T.SIGN||tid===T.ONIGIRI||tid===T.CAVE) {
+        const label=tid===T.CHEST?'宝箱を開ける':tid===T.POT?'ツボを割る':tid===T.ONIGIRI?'おにぎりを拾う':tid===T.CAVE?'洞窟に入る':'看板を読む';
         ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(CW/2-100,CH-52,200,28);
         ctx.fillStyle='#ffdd44'; ctx.font='12px "Courier New"';
         ctx.textAlign='center'; ctx.fillText(`[SPACE] ${label}`,CW/2,CH-34); ctx.textAlign='left';
