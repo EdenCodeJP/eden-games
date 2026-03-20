@@ -412,10 +412,19 @@ function checkInteract() {
     ], checkBossTrigger);
   } else if (tile === T.SIGN) {
     runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'……倒したな。'},
+      {speaker:'CLANA', col:'#9966ff', text:'倒しましたね。……意外と、あっさり。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'報酬の200G、もう数えた。合計 ' + gold + 'G や。'},
+      {speaker:'CLANA', col:'#9966ff', text:'（ため息）……のっぱら、広いですね。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'そやな。'},
+      {speaker:'CLANA', col:'#9966ff', text:'楽園……本当に作れると思いますか？'},
+      {speaker:'EDENY', col:'#ff8c40', text:'知らん。でも、やってみな分からんやろ。'},
+      {speaker:'CLANA', col:'#9966ff', text:'……エデニーらしくない発言ですね。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'黙れ。'},
+      {speaker:'CLANA', col:'#9966ff', text:'（笑）……始めましょうか。第一歩から。'},
       {speaker:'', col:'#00d4aa', text:'「EDEN PARK 建設予定地」'},
-      {speaker:'CLANA', col:'#9966ff', text:'第一歩ですね。'},
-      {speaker:'EDENY', col:'#ff8c40', text:'まだ全然足りんけどな。'},
-      {speaker:'CLANA', col:'#9966ff', text:'……気が遠くなりますね。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'名前負けせんようにしないとな。'},
+      {speaker:'CLANA', col:'#9966ff', text:'大丈夫です。あなたが言い出したんですから。'},
     ], () => { gameState = 'complete'; });
   }
 }
