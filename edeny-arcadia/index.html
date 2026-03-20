@@ -310,6 +310,31 @@ function drawParticles() {
   ctx.globalAlpha=1;
 }
 
+// ─── Floating damage texts ────────────────────────────────────────────────────
+const floatTexts=[];
+function addFloatText(x,y,text,col='#fff') {
+  floatTexts.push({x,y,text,col,life:1,vy:-1.4});
+}
+function updateFloatTexts() {
+  for(let i=floatTexts.length-1;i>=0;i--) {
+    const f=floatTexts[i]; f.y+=f.vy; f.life-=0.016;
+    if(f.life<=0) floatTexts.splice(i,1);
+  }
+}
+function drawFloatTexts() {
+  ctx.save();
+  floatTexts.forEach(f=>{
+    ctx.globalAlpha=Math.max(0,f.life);
+    ctx.fillStyle=f.col; ctx.font='bold 22px "Courier New"';
+    ctx.textAlign='center';
+    ctx.shadowColor=f.col; ctx.shadowBlur=10;
+    ctx.fillText(f.text,f.x,f.y);
+    ctx.shadowBlur=0;
+  });
+  ctx.globalAlpha=1; ctx.textAlign='left';
+  ctx.restore();
+}
+
 // ─── Player & Clona ───────────────────────────────────────────────────────────
 const player = { tx:9, ty:20, dx:9*TS, dy:20*TS, dir:1, anim:0 };
 const clona  = { tx:9, ty:21, dx:9*TS, dy:21*TS, dir:0, anim:0 };
@@ -453,8 +478,8 @@ function updateBattle() {
   }
 
   if (bt.phase === 'player_select') {
-    if (justPressed['ArrowLeft'] ||justPressed['KeyA']) bt.cursor = 0;
-    if (justPressed['ArrowRight']||justPressed['KeyD']) bt.cursor = 1;
+    if (justPressed['ArrowLeft'] ||justPressed['KeyA']) bt.cursor = Math.max(0, bt.cursor-1);
+    if (justPressed['ArrowRight']||justPressed['KeyD']) bt.cursor = Math.min(2, bt.cursor+1);
     const confirm = justPressed['Space']||justPressed['Enter']||justPressed['KeyZ'];
     if (confirm) {
       if (bt.cursor === 0) {
@@ -462,15 +487,21 @@ function updateBattle() {
         bt.enemyHp = Math.max(0, bt.enemyHp - dmg);
         bt.flashEnemy = 1.0;
         bt.log = `エデニーの攻撃！ ${dmg} ダメージ！`;
+        addFloatText(CW/2, 105, `-${dmg}`, '#ff6666');
         seHit(); shake(4);
-      } else {
+        bt.phase = 'player_attack'; bt.timer = 50;
+      } else if (bt.cursor === 1) {
         const dmg = 15 + Math.floor(Math.random()*11);
         bt.enemyHp = Math.max(0, bt.enemyHp - dmg);
         bt.flashEnemy = 1.0;
         bt.log = `クラナの魔法！ ✨ ${dmg} ダメージ！`;
+        addFloatText(CW/2, 105, `-${dmg}`, '#cc66ff');
         seMagic(); shake(6);
+        bt.phase = 'player_attack'; bt.timer = 50;
+      } else {
+        bt.log = 'クラナ：「ダメです！英雄になってください！」';
+        beep(330,0.08,0.05,'square'); beep(220,0.12,0.05,'square',0.09);
       }
-      bt.phase = 'player_attack'; bt.timer = 50;
     }
   }
 
@@ -483,6 +514,7 @@ function updateBattle() {
       bt.playerHp = Math.max(1, bt.playerHp - dmg);
       bt.flashPlayer = 1.0;
       bt.log = `謎の影の攻撃！ ${dmg} ダメージ！` + (prev - dmg <= 0 ? ' （なんとか生き残った！）' : '');
+      addFloatText(200, 258, `-${dmg}`, '#ff4444');
       seHit(); shake(8);
       bt.phase = 'enemy_attack'; bt.timer = 55;
     }
@@ -495,7 +527,7 @@ function updateBattle() {
 }
 
 function endBattle() {
-  bossDefeated = true; gold += 200;
+  bossDefeated = true; gold += 200; floatTexts.length=0;
   MAP[19][11] = T.SIGN; // 看板出現！
   fadeOut(() => {
     player.tx=9; player.ty=16; player.dx=9*TS; player.dy=16*TS;
@@ -522,7 +554,7 @@ function resetGame() {
   bt.phase='player_select'; bt.victoryIdx=0; bt.victoryProg=0;
   // スクリプト・演出リセット
   script=null; scriptIdx=0; scriptProg=0;
-  particles.length=0; shakeAmt=0;
+  particles.length=0; floatTexts.length=0; shakeAmt=0;
   fadeAlpha=0; fadeDir=0; fadeCb=null;
   stopBgm();
   gameState='title';
@@ -1054,6 +1086,7 @@ function drawBattle() {
 
   // Boss character
   drawBoss(bt.flashEnemy);
+  drawFloatTexts();
 
   // player area
   ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(20,272,CW-40,58);
@@ -1091,18 +1124,19 @@ function drawBattle() {
   } else {
     // コマンド表示
     ctx.fillStyle='#aabbcc'; ctx.font='13px "Courier New"'; ctx.fillText(bt.log, 34, 364);
-    const cmds = ['⚔️  攻撃', '✨ クラナの魔法'];
+    const cmds = ['⚔️  攻撃', '✨ クラナの魔法', '🏃 逃げる'];
     const active = bt.phase==='player_select';
     cmds.forEach((cmd,i) => {
-      const cx=50+i*290, cy=400;
-      ctx.fillStyle = active ? (bt.cursor===i?'rgba(0,212,170,0.15)':'rgba(255,255,255,0.05)') : 'rgba(80,80,80,0.1)';
-      ctx.fillRect(cx-10,cy-22,260,36);
+      const cx=34+i*196, cy=400, w=180;
+      const hiCol = i===2?'rgba(255,107,53,0.15)':'rgba(0,212,170,0.15)';
+      ctx.fillStyle = active ? (bt.cursor===i ? hiCol : 'rgba(255,255,255,0.05)') : 'rgba(80,80,80,0.1)';
+      ctx.fillRect(cx-10,cy-22,w,36);
       if (active && bt.cursor===i) {
-        ctx.strokeStyle='#00d4aa'; ctx.lineWidth=2; ctx.strokeRect(cx-10,cy-22,260,36);
-        ctx.fillStyle='#00d4aa'; ctx.font='16px monospace'; ctx.fillText('▶',cx-22,cy+2);
+        ctx.strokeStyle=i===2?'#ff6b35':'#00d4aa'; ctx.lineWidth=2; ctx.strokeRect(cx-10,cy-22,w,36);
+        ctx.fillStyle=i===2?'#ff6b35':'#00d4aa'; ctx.font='16px monospace'; ctx.fillText('▶',cx-22,cy+2);
       }
-      ctx.fillStyle = active ? '#fff' : '#666';
-      ctx.font=`${active?'bold ':''}15px "Courier New"`;
+      ctx.fillStyle = active ? (i===2?'#ff9966':'#fff') : '#666';
+      ctx.font=`${active?'bold ':''}13px "Courier New"`;
       ctx.fillText(cmd, cx, cy+2);
     });
     if (active) {
@@ -1114,24 +1148,86 @@ function drawBattle() {
 
 // ─── Complete screen ──────────────────────────────────────────────────────────
 function drawComplete() {
-  ctx.fillStyle='#050810'; ctx.fillRect(0,0,CW,CH);
-  for (let i=0;i<120;i++) {
-    ctx.fillStyle=`rgba(255,255,255,${(Math.sin(Date.now()*0.0008+i)*0.3+0.5)*(i%5<1?0.8:0.3)})`;
+  const now=Date.now(), t=now*0.001;
+
+  // 背景グラデ
+  const bg=ctx.createLinearGradient(0,0,0,CH);
+  bg.addColorStop(0,'#010208'); bg.addColorStop(0.6,'#050b1e'); bg.addColorStop(1,'#0a1a10');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,CW,CH);
+
+  // 星
+  for(let i=0;i<130;i++){
+    const tw=Math.sin(t*(0.8+i%5*0.3)+i)*0.5+0.5;
+    ctx.fillStyle=`rgba(255,255,255,${(0.3+tw*0.5)*(i%20===0?0.9:0.5)})`;
     ctx.fillRect((i*173)%CW,(i*97)%CH,i%11===0?2:1,i%11===0?2:1);
   }
+
+  // 地平線グロー
+  const hor=ctx.createRadialGradient(CW/2,CH,0,CW/2,CH,CW*0.9);
+  hor.addColorStop(0,'rgba(0,212,170,0.22)'); hor.addColorStop(0.45,'rgba(0,80,60,0.10)'); hor.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=hor; ctx.fillRect(0,0,CW,CH);
+
+  // 地面
+  const grd2=ctx.createLinearGradient(0,390,0,CH);
+  grd2.addColorStop(0,'#1a4010'); grd2.addColorStop(1,'#0a1e06');
+  ctx.fillStyle=grd2; ctx.fillRect(0,400,CW,CH-400);
+  ctx.strokeStyle='rgba(70,200,50,0.45)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,401); ctx.lineTo(CW,401); ctx.stroke();
+
+  // エデニー（左）
+  const bob=Math.sin(t*1.5)*3;
+  ctx.fillStyle='rgba(255,140,64,0.1)';
+  ctx.beginPath(); ctx.ellipse(155,401,36,8,0,0,Math.PI*2); ctx.fill();
+  ctx.save(); ctx.translate(155,394+bob); ctx.scale(3,3);
+  drawChar(-12,-30,3,'#c8763a','#ff8c40',t*20);
+  ctx.restore();
   ctx.textAlign='center';
-  ctx.fillStyle='rgba(0,212,170,0.15)'; ctx.fillRect(CW/2-220,CH/2-80,440,160);
-  ctx.strokeStyle='rgba(0,212,170,0.5)'; ctx.lineWidth=1; ctx.strokeRect(CW/2-220,CH/2-80,440,160);
-  ctx.shadowColor='#00d4aa'; ctx.shadowBlur=20;
-  ctx.fillStyle='#00d4aa'; ctx.font='bold 28px "Courier New"'; ctx.fillText('TO BE CONTINUED...',CW/2,CH/2-30);
+  ctx.shadowColor='#ff8c40'; ctx.shadowBlur=6;
+  ctx.fillStyle='#ff8c40'; ctx.font='bold 11px "Courier New"';
+  ctx.fillText('Edeny',155,438+bob);
+
+  // クラナ（右）
+  ctx.fillStyle='rgba(153,102,255,0.1)';
+  ctx.beginPath(); ctx.ellipse(485,401,36,8,0,0,Math.PI*2); ctx.fill();
+  ctx.save(); ctx.translate(485,394-bob); ctx.scale(3,3);
+  drawChar(-12,-30,2,'#bb88ff','#44aacc',t*20+3);
+  ctx.restore();
+  for(let i=0;i<4;i++){
+    const ang=t*1.5+i*1.57, r=26+Math.sin(t*2+i)*7;
+    const sx=485+Math.cos(ang)*r, sy=(394-bob)-8+Math.sin(ang)*r*0.4;
+    ctx.fillStyle=`rgba(200,160,255,${Math.sin(t*2+i*1.5)*0.4+0.6})`;
+    ctx.fillRect(Math.round(sx)-1,Math.round(sy)-1,3,3);
+  }
+  ctx.shadowColor='#bb88ff'; ctx.shadowBlur=6;
+  ctx.fillStyle='#bb88ff'; ctx.font='bold 11px "Courier New"';
+  ctx.fillText('Clana',485,438-bob);
   ctx.shadowBlur=0;
-  ctx.fillStyle='rgba(180,180,220,0.8)'; ctx.font='14px "Courier New"';
-  ctx.fillText('〜楽園への道はまだ続く〜',CW/2,CH/2+10);
-  ctx.fillStyle='#556070'; ctx.font='12px "Courier New"';
-  ctx.fillText(`最終獲得ゴールド: ${gold} G`,CW/2,CH/2+44);
-  if (Math.floor(Date.now()/500)%2===0) {
-    ctx.fillStyle='#aaa'; ctx.font='13px "Courier New"';
-    ctx.fillText('PRESS ANY KEY',CW/2,CH/2+90);
+
+  // テキストパネル
+  ctx.fillStyle='rgba(2,6,18,0.88)'; ctx.fillRect(CW/2-195,48,390,228);
+  ctx.strokeStyle='rgba(0,212,170,0.45)'; ctx.lineWidth=1; ctx.strokeRect(CW/2-195,48,390,228);
+
+  ctx.shadowColor='#00d4aa'; ctx.shadowBlur=18+Math.sin(t)*5;
+  ctx.fillStyle='#00d4aa'; ctx.font='bold 26px "Courier New"';
+  ctx.fillText('TO BE CONTINUED...',CW/2,96);
+  ctx.shadowBlur=0;
+
+  ctx.fillStyle='rgba(180,220,200,0.88)'; ctx.font='14px "Noto Sans JP","Courier New",sans-serif';
+  ctx.fillText('〜楽園への道はまだ続く〜',CW/2,132);
+
+  ctx.fillStyle='rgba(0,212,170,0.25)'; ctx.fillRect(CW/2-170,150,340,1);
+
+  ctx.fillStyle='#ffd700'; ctx.font='13px "Courier New"';
+  ctx.fillText(`💰 最終ゴールド: ${gold} G`,CW/2,180);
+
+  ctx.fillStyle='rgba(255,140,64,0.8)'; ctx.font='12px "Courier New"';
+  ctx.fillText('「倒した。200G もらった。まあまあや。」',CW/2,210);
+  ctx.fillStyle='rgba(170,140,220,0.8)';
+  ctx.fillText('「英雄になってたやん……」（クラナ心の声）',CW/2,238);
+
+  if (Math.floor(now/500)%2===0) {
+    ctx.fillStyle='rgba(150,160,180,0.75)'; ctx.font='12px "Courier New"';
+    ctx.fillText('PRESS  ANY  KEY',CW/2,296);
   }
   ctx.textAlign='left'; ctx.shadowBlur=0;
 }
@@ -1169,6 +1265,7 @@ function update() {
   updateFade();
   updateShake();
   updateParticles();
+  updateFloatTexts();
   handleMovement();
   if (gameState==='battle') updateBattle();
 
