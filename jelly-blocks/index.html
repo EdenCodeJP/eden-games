@@ -7,14 +7,14 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
-  background: linear-gradient(135deg, #ffe0f0 0%, #f5e0ff 50%, #e0f0ff 100%);
+  background: linear-gradient(160deg, #001830 0%, #003355 50%, #004466 100%);
   display: flex; align-items: center; justify-content: center;
   min-height: 100vh; overflow: hidden;
 }
 canvas {
   display: block;
   border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(255,100,180,0.35), 0 0 40px rgba(200,100,255,0.2);
+  box-shadow: 0 20px 60px rgba(0,180,255,0.35), 0 0 50px rgba(0,220,255,0.18);
 }
 </style>
 </head>
@@ -52,13 +52,13 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
 
 // ---- FRUIT COLORS ----
 const FRUITS = [
-  { name:'いちご',   col:'#ff8faa', glow:'#ff3366', dark:'#cc2255' }, // 0
-  { name:'ピーチ',   col:'#ffb8cc', glow:'#ff7aaa', dark:'#cc4477' }, // 1
-  { name:'レモン',   col:'#fff580', glow:'#ffd700', dark:'#ccaa00' }, // 2
-  { name:'オレンジ', col:'#ffc875', glow:'#ff8c00', dark:'#cc6600' }, // 3
-  { name:'スイカ',   col:'#98f098', glow:'#44bb44', dark:'#228822' }, // 4
-  { name:'ぶどう',   col:'#d0a8f4', glow:'#9944cc', dark:'#662299' }, // 5
-  { name:'ライム',   col:'#bcf070', glow:'#88cc22', dark:'#558811' }, // 6
+  { name:'いちご',   col:'#ff4477', glow:'#ff0044', dark:'#aa0022' }, // 0 vivid red
+  { name:'ピーチ',   col:'#ff88cc', glow:'#ff44aa', dark:'#cc1177' }, // 1 hot pink
+  { name:'レモン',   col:'#ffee44', glow:'#ffcc00', dark:'#aa8800' }, // 2 vivid yellow
+  { name:'オレンジ', col:'#ff8822', glow:'#ff5500', dark:'#aa3300' }, // 3 vivid orange
+  { name:'スイカ',   col:'#44ee88', glow:'#00cc55', dark:'#007733' }, // 4 vivid green
+  { name:'ぶどう',   col:'#aa66ff', glow:'#7722ff', dark:'#440099' }, // 5 vivid purple
+  { name:'ライム',   col:'#00ddff', glow:'#00aaee', dark:'#006699' }, // 6 cyan/blue hawaii
 ];
 
 // ---- PIECE SHAPES (custom — NOT standard tetrominoes) ----
@@ -104,6 +104,8 @@ const SE={
   merge:   ()=>{ tone(880,'sine',0.13,0.15); tone(1320,'sine',0.08,0.22,0.07); },
   levelup: ()=>{ [523,659,784,1047,1319].forEach((f,i)=>tone(f,'triangle',0.16,0.25,i*0.06)); },
   gameover:()=>{ [400,330,260,200].forEach((f,i)=>tone(f,'sawtooth',0.14,0.35,i*0.18)); },
+  fever:   ()=>{ [880,1100,1320,1760].forEach((f,i)=>tone(f,'triangle',0.18,0.2,i*0.05)); },
+  combo:   (n)=>{ const f=440+n*80; tone(f,'triangle',0.14,0.18); tone(f*1.5,'sine',0.08,0.25,0.1); },
 };
 
 // BGM — cute bouncy melody
@@ -126,6 +128,28 @@ function bgmTick(){
 function startBgm(){ if(bgmOn)return; bgmOn=true; bgmIdx=0; bgmTick(); }
 function stopBgm(){ bgmOn=false; if(bgmTimer){clearTimeout(bgmTimer);bgmTimer=null;} }
 
+// ---- BG THEMES ----
+const BG_THEMES = [
+  { name:'🌊 オーシャン',  from:[0,20,40],    to:[0,51,85]   }, // Lv1-2
+  { name:'🌅 サンセット',  from:[40,10,30],   to:[90,30,70]  }, // Lv3-4
+  { name:'🐋 ディープシー',from:[0,30,35],    to:[0,50,55]   }, // Lv5-6
+  { name:'🌌 オーロラ',   from:[5,20,10],    to:[15,45,25]  }, // Lv7-8
+  { name:'🚀 スペース',   from:[5,5,18],     to:[10,10,35]  }, // Lv9+
+];
+let bgThemeIdx=0, bgBlend=0; // bgBlend: 0=current theme, 1=next theme (fading)
+let bgFadeTimer=0;
+
+function getThemeIdx(lv){ return Math.min(Math.floor((lv-1)/2), BG_THEMES.length-1); }
+
+function lerpCol(a,b,t){
+  return [
+    Math.round(a[0]+(b[0]-a[0])*t),
+    Math.round(a[1]+(b[1]-a[1])*t),
+    Math.round(a[2]+(b[2]-a[2])*t),
+  ];
+}
+function rgb(c){ return `rgb(${c[0]},${c[1]},${c[2]})`; }
+
 // ---- GAME STATE ----
 let gs='title'; // title|playing|paused|gameover
 let grid, gridCol, gridSquish;
@@ -133,6 +157,11 @@ let cur=null, nxt=null;
 let score=0, lines=0, level=1;
 let fallTimer=0, lockTimer=0, locking=false;
 let mergeMsg='', mergeMsgTimer=0;
+// --- COMBO & FEVER ---
+let combo=0, comboMsg='', comboMsgTimer=0;
+let fever=false, feverTimer=0;
+const FEVER_DURATION=600; // frames @60fps ≈ 10sec
+let feverMsg='', feverMsgTimer=0;
 let particles=[], bgParts=[], flashCells=[];
 let time=0, lastTime=0;
 let wobPhases=[0,0,0,0];
@@ -223,10 +252,39 @@ function clearLines(){
     }
   }
   if(cleared>0){
-    score+=[0,100,300,600,1000][cleared]*level;
-    lines+=cleared;
+    combo++;
+    const mult = fever ? 2 : 1;
+    const base = [0,100,300,600,1000][cleared];
+    score += base * level * mult * Math.max(1, combo);
+    lines += cleared;
+
+    // コンボ演出
+    SE.combo(combo);
+    if(combo>=2){
+      comboMsg = combo>=5 ? `🔥 COMBO x${combo}!!` : `⚡ COMBO x${combo}!`;
+      comboMsgTimer = 90;
+    }
+
+    // フィーバー発動
+    if(combo>=3 && !fever){
+      fever=true; feverTimer=FEVER_DURATION;
+      feverMsg='🔥 FEVER!! 🔥'; feverMsgTimer=120;
+      SE.fever();
+    }
+
     const nl=Math.floor(lines/10)+1;
-    if(nl>level){ level=nl; SE.levelup(); } else SE.clear();
+    if(nl>level){
+      level=nl;
+      // レベルアップで背景テーマ変化
+      const ni=getThemeIdx(level);
+      if(ni!==bgThemeIdx){ bgThemeIdx=ni; bgFadeTimer=0; }
+      SE.levelup();
+    } else {
+      SE.clear();
+    }
+  } else {
+    // ライン消去なし → コンボリセット
+    combo=0;
   }
 }
 
@@ -250,7 +308,7 @@ function initBgParts(){
     size:1+Math.random()*2.5,
     spd:0.3+Math.random()*0.5,
     op:Math.random(), dir:Math.random()>.5?1:-1,
-    col:['#ffb3de','#e0b3ff','#b8d4ff','#fffab3'][0|Math.random()*4],
+    col:['#00ccff','#0088dd','#00ffee','#4488ff'][0|Math.random()*4],
   });
 }
 
@@ -299,12 +357,12 @@ function drawHeart(x,y,s,col,alpha){
 // ---- DRAW GRID ----
 function drawGrid(){
   // grid bg
-  ctx.fillStyle='rgba(255,220,240,0.45)';
+  ctx.fillStyle='rgba(0,20,50,0.75)';
   ctx.beginPath(); ctx.roundRect(GX-4,GY-4,COLS*CS+8,ROWS*CS+8,10);
   ctx.fill();
-  ctx.strokeStyle='rgba(255,150,200,0.28)'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.strokeStyle='rgba(0,180,255,0.35)'; ctx.lineWidth=1.5; ctx.stroke();
   // grid lines
-  ctx.strokeStyle='rgba(255,170,220,0.13)'; ctx.lineWidth=.5;
+  ctx.strokeStyle='rgba(0,150,220,0.1)'; ctx.lineWidth=.5;
   for(let r=0;r<=ROWS;r++){
     ctx.beginPath(); ctx.moveTo(GX,GY+r*CS); ctx.lineTo(GX+COLS*CS,GY+r*CS); ctx.stroke();
   }
@@ -345,9 +403,9 @@ function drawCurrent(){
 function drawPanel(){
   const px=GX+COLS*CS+20, pw=140;
 
-  function box(y,h){ ctx.fillStyle='rgba(255,210,235,0.32)'; ctx.strokeStyle='rgba(255,155,205,0.45)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(px,y,pw,h,10); ctx.fill(); ctx.stroke(); }
-  function label(txt,y){ ctx.fillStyle='#cc3377'; ctx.font='bold 10px "Segoe UI"'; ctx.textAlign='center'; ctx.fillText(txt,px+pw/2,y); }
-  function val(txt,y){ ctx.fillStyle='#550033'; ctx.font='bold 20px "Segoe UI"'; ctx.textAlign='center'; ctx.fillText(txt,px+pw/2,y); }
+  function box(y,h){ ctx.fillStyle='rgba(0,20,55,0.7)'; ctx.strokeStyle='rgba(0,180,255,0.4)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(px,y,pw,h,10); ctx.fill(); ctx.stroke(); }
+  function label(txt,y){ ctx.fillStyle='#00ccff'; ctx.font='bold 10px "Segoe UI"'; ctx.textAlign='center'; ctx.fillText(txt,px+pw/2,y); }
+  function val(txt,y){ ctx.fillStyle='#ffffff'; ctx.font='bold 20px "Segoe UI"'; ctx.textAlign='center'; ctx.fillText(txt,px+pw/2,y); }
 
   // NEXT
   box(GY,104);
@@ -374,15 +432,15 @@ function drawPanel(){
   if(mergeMsgTimer>0){
     const a=Math.min(1,mergeMsgTimer/30);
     ctx.save(); ctx.globalAlpha=a;
-    ctx.fillStyle='#ff2288'; ctx.font='bold 12px "Segoe UI"'; ctx.textAlign='center';
+    ctx.fillStyle='#00eeff'; ctx.font='bold 12px "Segoe UI"'; ctx.textAlign='center';
     ctx.fillText(mergeMsg, px+pw/2, iy+210);
     ctx.restore();
   }
 
   // controls
-  ctx.fillStyle='rgba(170,100,140,0.65)'; ctx.font='9px "Segoe UI"'; ctx.textAlign='center';
-  ['←→ 移動','↑ 回転','↓ 落とす','Space ドロップ','P ポーズ'].forEach((t,i)=>{
-    ctx.fillText(t, px+pw/2, CH-68+i*13);
+  ctx.fillStyle='rgba(100,200,255,0.55)'; ctx.font='9px "Segoe UI"'; ctx.textAlign='center';
+  ['←→ 移動','↑ 回転','↓ 落とす','Space ドロップ','P ポーズ','','🎮 スティック移動','A 回転  B ドロップ'].forEach((t,i)=>{
+    ctx.fillText(t, px+pw/2, CH-88+i*12);
   });
 }
 
@@ -397,11 +455,30 @@ function drawParticles(){
 
 // ---- DRAW BG ----
 function drawBg(){
+  const th=BG_THEMES[bgThemeIdx];
+  const t=Math.min(1, bgFadeTimer/60); // 60フレームでフェード
+  // フィーバー時は少し明るく脈動
+  const fv = fever ? 0.12*Math.sin(time*8)+0.12 : 0;
+  const fromC=lerpCol(th.from, th.from.map(v=>Math.min(255,v+fv*80)), fv>0?1:0);
+  const toC  =lerpCol(th.to,   th.to.map(  v=>Math.min(255,v+fv*60)), fv>0?1:0);
+
   const g=ctx.createLinearGradient(0,0,CW,CH);
-  g.addColorStop(0,'#fff0f8'); g.addColorStop(.5,'#f9f0ff'); g.addColorStop(1,'#f0f8ff');
+  g.addColorStop(0, rgb(fromC));
+  g.addColorStop(1, rgb(toC));
   ctx.fillStyle=g; ctx.fillRect(0,0,CW,CH);
+
+  // フィーバー外枠グロー
+  if(fever){
+    const glowAlpha=0.15+0.1*Math.sin(time*6);
+    ctx.save();
+    ctx.strokeStyle=`rgba(255,200,0,${glowAlpha})`;
+    ctx.lineWidth=12;
+    ctx.strokeRect(0,0,CW,CH);
+    ctx.restore();
+  }
+
   for(const p of bgParts){
-    ctx.save(); ctx.globalAlpha=p.op*.55;
+    ctx.save(); ctx.globalAlpha=p.op*(fever?.8:.5);
     ctx.fillStyle=p.col; ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
@@ -416,13 +493,13 @@ function drawTitle(){
   ctx.font='bold 52px "Segoe UI"';
   ctx.textAlign='center';
   const tg=ctx.createLinearGradient(CW/2-160,ty-50,CW/2+160,ty);
-  tg.addColorStop(0,'#ff5599'); tg.addColorStop(.4,'#cc44ff'); tg.addColorStop(1,'#44aaff');
+  tg.addColorStop(0,'#00eeff'); tg.addColorStop(.4,'#0088ff'); tg.addColorStop(1,'#00ffcc');
   ctx.fillStyle=tg;
-  ctx.shadowColor='rgba(255,100,200,.45)'; ctx.shadowBlur=18;
+  ctx.shadowColor='rgba(0,200,255,.6)'; ctx.shadowBlur=22;
   ctx.fillText('JellyBlocks',CW/2,ty+Math.sin(time*2.2)*4);
   ctx.restore();
 
-  ctx.fillStyle='#cc4488'; ctx.font='13px "Segoe UI"'; ctx.textAlign='center';
+  ctx.fillStyle='#66ddff'; ctx.font='13px "Segoe UI"'; ctx.textAlign='center';
   ctx.fillText('〜プルプルジェリーのブロックゲーム〜',CW/2,ty+34);
 
   // preview row of jellies
@@ -437,61 +514,63 @@ function drawTitle(){
   const pulse=.92+.08*Math.sin(time*3.2);
   ctx.save(); ctx.translate(CW/2,CH*.59); ctx.scale(pulse,pulse);
   const bg=ctx.createLinearGradient(-90,-24,90,24);
-  bg.addColorStop(0,'#ff80b8'); bg.addColorStop(1,'#bb44ff');
-  ctx.fillStyle=bg; ctx.shadowColor='rgba(255,100,200,.55)'; ctx.shadowBlur=18;
+  bg.addColorStop(0,'#0099ee'); bg.addColorStop(1,'#00ddcc');
+  ctx.fillStyle=bg; ctx.shadowColor='rgba(0,200,255,.6)'; ctx.shadowBlur=18;
   ctx.beginPath(); ctx.roundRect(-90,-24,180,48,24); ctx.fill();
   ctx.fillStyle='#fff'; ctx.font='bold 22px "Segoe UI"'; ctx.textAlign='center'; ctx.shadowBlur=0;
   ctx.fillText('▶  START',0,8);
   ctx.restore();
 
-  ctx.fillStyle='#aa5580'; ctx.font='12px "Segoe UI"'; ctx.textAlign='center';
+  ctx.fillStyle='#55aacc'; ctx.font='12px "Segoe UI"'; ctx.textAlign='center';
   ctx.fillText('Click / Enter / Space でスタート',CW/2,CH*.59+40);
 
-  const feats=['🍓 7種フルーツカラーのジェリーブロック','✨ 同じ色3個以上でジェリーマージ！','💖 プルプル揺れるジェリー感'];
-  ctx.fillStyle='#bb5588'; ctx.font='12px "Segoe UI"';
+  const feats=['🍓 7種フルーツカラーのジェリーブロック','✨ 同じ色3個以上でジェリーマージ！','💎 プルプル揺れるジェリー感'];
+  ctx.fillStyle='#66ccee'; ctx.font='12px "Segoe UI"';
   feats.forEach((f,i)=>ctx.fillText(f,CW/2,CH*.73+i*22));
 }
 
 // ---- GAMEOVER ----
 function drawGameOver(){
-  ctx.fillStyle='rgba(20,0,10,.52)'; ctx.fillRect(0,0,CW,CH);
+  ctx.fillStyle='rgba(0,10,30,.65)'; ctx.fillRect(0,0,CW,CH);
   const cy=CH*.4;
-  ctx.save(); ctx.shadowColor='rgba(255,100,200,.7)'; ctx.shadowBlur=22;
-  ctx.fillStyle='#fff0f8'; ctx.beginPath(); ctx.roundRect(CW/2-135,cy-68,270,215,18); ctx.fill();
+  ctx.save(); ctx.shadowColor='rgba(0,180,255,.7)'; ctx.shadowBlur=22;
+  ctx.fillStyle='#001e3c'; ctx.beginPath(); ctx.roundRect(CW/2-135,cy-68,270,215,18); ctx.fill();
+  ctx.strokeStyle='rgba(0,180,255,.5)'; ctx.lineWidth=1.5; ctx.stroke();
   ctx.restore();
-  ctx.fillStyle='#cc2266'; ctx.font='bold 30px "Segoe UI"'; ctx.textAlign='center';
+  ctx.fillStyle='#00ccff'; ctx.font='bold 30px "Segoe UI"'; ctx.textAlign='center';
   ctx.fillText('GAME OVER',CW/2,cy-22);
-  ctx.fillStyle='#880044'; ctx.font='14px "Segoe UI"';
+  ctx.fillStyle='#aaddff'; ctx.font='14px "Segoe UI"';
   ctx.fillText(`スコア: ${score.toLocaleString()}`,CW/2,cy+12);
   ctx.fillText(`ライン: ${lines}   レベル: ${level}`,CW/2,cy+34);
 
   const p=.94+.06*Math.sin(time*4);
   ctx.save(); ctx.translate(CW/2,cy+96); ctx.scale(p,p);
   const bg=ctx.createLinearGradient(-76,-20,76,20);
-  bg.addColorStop(0,'#ff80b8'); bg.addColorStop(1,'#bb44ff');
+  bg.addColorStop(0,'#0088dd'); bg.addColorStop(1,'#00bbcc');
   ctx.fillStyle=bg; ctx.beginPath(); ctx.roundRect(-76,-20,152,40,20); ctx.fill();
   ctx.fillStyle='#fff'; ctx.font='bold 16px "Segoe UI"'; ctx.textAlign='center';
   ctx.fillText('もう一回！',0,6);
   ctx.restore();
-  ctx.fillStyle='#aa6688'; ctx.font='11px "Segoe UI"'; ctx.textAlign='center';
+  ctx.fillStyle='#55aacc'; ctx.font='11px "Segoe UI"'; ctx.textAlign='center';
   ctx.fillText('Space / Enter / Click',CW/2,cy+135);
 }
 
 // ---- PAUSE ----
 function drawPause(){
-  ctx.fillStyle='rgba(20,0,10,.42)'; ctx.fillRect(0,0,CW,CH);
-  ctx.fillStyle='#fff5fc'; ctx.font='bold 34px "Segoe UI"'; ctx.textAlign='center';
+  ctx.fillStyle='rgba(0,10,30,.6)'; ctx.fillRect(0,0,CW,CH);
+  ctx.fillStyle='#00eeff'; ctx.font='bold 34px "Segoe UI"'; ctx.textAlign='center';
   ctx.fillText('⏸  PAUSE',CW/2,CH/2);
-  ctx.fillStyle='#cc4488'; ctx.font='13px "Segoe UI"';
+  ctx.fillStyle='#66ddff'; ctx.font='13px "Segoe UI"';
   ctx.fillText('P で再開',CW/2,CH/2+36);
 }
 
 // ---- TITLE BAR ----
 function drawTitleBar(){
-  ctx.fillStyle='rgba(255,200,235,.38)';
+  ctx.fillStyle='rgba(0,30,60,.55)';
   ctx.beginPath(); ctx.roundRect(GX,10,COLS*CS,54,8); ctx.fill();
+  ctx.strokeStyle='rgba(0,180,255,.3)'; ctx.lineWidth=1; ctx.stroke();
   const tg=ctx.createLinearGradient(GX,0,GX+COLS*CS,0);
-  tg.addColorStop(0,'#ff559a'); tg.addColorStop(.5,'#bb44ff'); tg.addColorStop(1,'#ff559a');
+  tg.addColorStop(0,'#00eeff'); tg.addColorStop(.5,'#0099ff'); tg.addColorStop(1,'#00eeff');
   ctx.fillStyle=tg; ctx.font='bold 28px "Segoe UI"'; ctx.textAlign='center';
   ctx.fillText('JellyBlocks', GX+COLS*CS/2, 50+Math.sin(time*2)*1.5);
 }
@@ -512,9 +591,23 @@ function update(dt){
   // flash
   for(const f of flashCells) f.t--;
   flashCells=flashCells.filter(f=>f.t>0);
-  // merge msg
+  // merge msg / combo msg
   if(mergeMsgTimer>0) mergeMsgTimer--;
+  if(comboMsgTimer>0) comboMsgTimer--;
+  if(feverMsgTimer>0) feverMsgTimer--;
+  // bg fade
+  if(bgFadeTimer<60) bgFadeTimer++;
   if(gs!=='playing') return;
+
+  // fever countdown
+  if(fever){
+    feverTimer--;
+    if(feverTimer<=0){ fever=false; feverTimer=0; }
+    // フィーバー中はパーティクル多め
+    if(Math.random()<0.15){
+      bgParts[0|Math.random()*bgParts.length].op=1;
+    }
+  }
 
   // squish decay (gridSquish is only valid after initGrid)
   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++)
@@ -531,11 +624,71 @@ function update(dt){
   if(locking){ lockTimer+=dt; if(lockTimer>480) lockPiece(); }
 }
 
+// ---- DRAW COMBO / FEVER ----
+function drawOverlayMsgs(){
+  const cx=GX+COLS*CS/2;
+
+  // フィーバー残り時間バー
+  if(fever){
+    const ratio=feverTimer/FEVER_DURATION;
+    const bw=COLS*CS, bh=5;
+    ctx.fillStyle='rgba(0,0,0,0.4)';
+    ctx.fillRect(GX, GY+ROWS*CS+8, bw, bh);
+    const fg=ctx.createLinearGradient(GX,0,GX+bw*ratio,0);
+    fg.addColorStop(0,'#ffdd00'); fg.addColorStop(1,'#ff8800');
+    ctx.fillStyle=fg;
+    ctx.fillRect(GX, GY+ROWS*CS+8, bw*ratio, bh);
+  }
+
+  // フィーバー発動テキスト
+  if(feverMsgTimer>0){
+    const a=Math.min(1,feverMsgTimer/30);
+    const scale=1+0.3*(1-feverMsgTimer/120);
+    ctx.save();
+    ctx.globalAlpha=a;
+    ctx.translate(cx, GY+ROWS*CS/2);
+    ctx.scale(scale,scale);
+    ctx.font='bold 36px "Segoe UI"';
+    ctx.textAlign='center';
+    ctx.shadowColor='#ff8800'; ctx.shadowBlur=20;
+    ctx.fillStyle='#ffee00';
+    ctx.fillText(feverMsg, 0, 0);
+    ctx.restore();
+  }
+
+  // コンボテキスト
+  if(comboMsgTimer>0){
+    const a=Math.min(1,comboMsgTimer/20);
+    const oy=-20*(1-comboMsgTimer/90);
+    ctx.save();
+    ctx.globalAlpha=a;
+    ctx.font='bold 22px "Segoe UI"';
+    ctx.textAlign='center';
+    ctx.shadowColor='rgba(255,200,0,0.8)'; ctx.shadowBlur=10;
+    ctx.fillStyle='#ffee44';
+    ctx.fillText(comboMsg, cx, GY+ROWS*CS/2+40+oy);
+    ctx.restore();
+  }
+
+  // フィーバー中のロゴ点滅
+  if(fever && Math.sin(time*8)>0){
+    const t=BG_THEMES[bgThemeIdx];
+    ctx.save();
+    ctx.globalAlpha=0.18+0.1*Math.sin(time*6);
+    ctx.fillStyle='#ffcc00';
+    ctx.font='bold 11px "Segoe UI"';
+    ctx.textAlign='center';
+    ctx.fillText('⚡ FEVER MODE ⚡', cx, GY-6);
+    ctx.restore();
+  }
+}
+
 // ---- DRAW ----
 function draw(){
   ctx.clearRect(0,0,CW,CH);
   if(gs==='title'){ drawTitle(); drawParticles(); return; }
   drawBg(); drawGrid(); drawCurrent(); drawTitleBar(); drawPanel(); drawParticles();
+  drawOverlayMsgs();
   if(gs==='gameover') drawGameOver();
   if(gs==='paused')   drawPause();
 }
@@ -592,16 +745,41 @@ canvas.addEventListener('touchend',e=>{
 },{passive:false});
 
 // Gamepad
-let gpPrev={};
+let gpPrev={}, gpAxisPrev=[0,0];
 function pollGp(){
   const gp=(navigator.getGamepads?navigator.getGamepads():[])[0];
-  if(!gp||gs!=='playing') return;
+  if(!gp) return;
   const pr=i=>gp.buttons[i]?.pressed;
-  if(pr(14)&&!gpPrev[14]) tryMove(-1);
-  if(pr(15)&&!gpPrev[15]) tryMove(1);
-  if(pr(0)&&!gpPrev[0])   tryRotate();
-  if(pr(1)&&!gpPrev[1])   hardDrop();
-  if(pr(13)&&!gpPrev[13]) softDrop();
+
+  // タイトル・ゲームオーバー: Aボタン or Startでゲーム開始
+  if(gs==='title'||gs==='gameover'){
+    if((pr(0)||pr(9))&&!(gpPrev[0]||gpPrev[9])) startGame();
+    gpPrev[0]=pr(0); gpPrev[9]=pr(9);
+    return;
+  }
+  // ポーズ: Startボタン(9)
+  if(pr(9)&&!gpPrev[9]){
+    if(gs==='playing'){ gs='paused'; stopBgm(); }
+    else if(gs==='paused'){ gs='playing'; startBgm(); }
+  }
+  if(gs!=='playing'){ for(let i=0;i<16;i++) gpPrev[i]=pr(i); return; }
+
+  // 十字キー
+  if(pr(14)&&!gpPrev[14]) tryMove(-1);   // 左
+  if(pr(15)&&!gpPrev[15]) tryMove(1);    // 右
+  if(pr(0) &&!gpPrev[0])  tryRotate();   // A: 回転
+  if(pr(2) &&!gpPrev[2])  tryRotate();   // X: 回転
+  if(pr(1) &&!gpPrev[1])  hardDrop();    // B: ハードドロップ
+  if(pr(13)&&!gpPrev[13]) softDrop();    // 下
+
+  // 左スティック (axis 0=横, axis 1=縦)
+  const ax=gp.axes[0]||0, ay=gp.axes[1]||0;
+  if(ax<-.5&&gpAxisPrev[0]>=-.5) tryMove(-1);
+  if(ax> .5&&gpAxisPrev[0]<= .5) tryMove(1);
+  if(ay> .5&&gpAxisPrev[1]<= .5) softDrop();
+  if(ay<-.5&&gpAxisPrev[1]>=-.5) tryRotate();
+  gpAxisPrev=[ax,ay];
+
   for(let i=0;i<16;i++) gpPrev[i]=pr(i);
 }
 
@@ -610,6 +788,9 @@ function startGame(){
   ac();
   initGrid(); score=0; lines=0; level=1;
   particles=[]; flashCells=[]; mergeMsg=''; mergeMsgTimer=0;
+  combo=0; comboMsg=''; comboMsgTimer=0;
+  fever=false; feverTimer=0; feverMsg=''; feverMsgTimer=0;
+  bgThemeIdx=0; bgFadeTimer=60;
   cur=null; nxt=mkPiece(); spawn();
   gs='playing'; fallTimer=0; lockTimer=0; locking=false;
   stopBgm(); startBgm();
