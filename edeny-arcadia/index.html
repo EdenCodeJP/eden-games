@@ -376,9 +376,9 @@ function drawFloatTexts() {
   ctx.restore();
 }
 
-// ─── Player & Clona ───────────────────────────────────────────────────────────
+// ─── Player & Clana ───────────────────────────────────────────────────────────
 const player = { tx:9, ty:20, dx:9*TS, dy:20*TS, dir:1, anim:0 };
-const clona  = { tx:9, ty:21, dx:9*TS, dy:21*TS, dir:0, anim:0 };
+const clana  = { tx:9, ty:21, dx:9*TS, dy:21*TS, dir:0, anim:0 };
 let camX = 0, camY = 288;
 const LERP = 0.14;
 let moveCooldown = 0;
@@ -396,8 +396,8 @@ function tryMove(ddx, ddy) {
   const nx = player.tx+ddx, ny = player.ty+ddy;
   if (nx<0||nx>=MCOLS||ny<0||ny>=MROWS) return false;
   if (!WALKABLE.has(getMap()[ny][nx])) return false;
-  clona.tx = player.tx; clona.ty = player.ty; clona.dir = player.dir;
-  clona.anim = player.anim + 2; // 少しずらしてリズムを変える
+  clana.tx = player.tx; clana.ty = player.ty; clana.dir = player.dir;
+  clana.anim = player.anim + 2; // 少しずらしてリズムを変える
   player.tx = nx; player.ty = ny;
   player.dir = ddx<0?2:ddx>0?3:ddy<0?0:1;
   player.anim++;
@@ -542,7 +542,7 @@ function checkBossTrigger() {
 function enterDungeon() {
   currentMap = 'dungeon';
   player.tx=9; player.ty=3; player.dx=9*TS; player.dy=3*TS; player.dir=1;
-  clona.tx=9;  clona.ty=4;  clona.dx=9*TS;  clona.dy=4*TS;
+  clana.tx=9;  clana.ty=4;  clana.dx=9*TS;  clana.dy=4*TS;
   updateCamera();
   startBgm('dungeon');
   runScript([
@@ -560,7 +560,7 @@ function exitDungeon() {
   fadeOut(() => {
     currentMap = 'field';
     player.tx=9; player.ty=20; player.dx=9*TS; player.dy=20*TS; player.dir=0;
-    clona.tx=9;  clona.ty=21;  clona.dx=9*TS;  clona.dy=21*TS;
+    clana.tx=9;  clana.ty=21;  clana.dx=9*TS;  clana.dy=21*TS;
     updateCamera();
     startBgm('field');
     runScript([
@@ -586,7 +586,7 @@ function startChapter2() {
   currentMap = 'field';
   MAP[21][9] = T.ONIGIRI;
   player.tx=9; player.ty=18; player.dx=9*TS; player.dy=18*TS; player.dir=1; player.anim=0;
-  clona.tx=9;  clona.ty=19;  clona.dx=9*TS;  clona.dy=19*TS;  clona.dir=0;  clona.anim=0;
+  clana.tx=9;  clana.ty=19;  clana.dx=9*TS;  clana.dy=19*TS;  clana.dir=0;  clana.anim=0;
   updateCamera();
   particles.length=0; floatTexts.length=0; shakeAmt=0;
   fadeAlpha=0; fadeDir=0; fadeCb=null;
@@ -725,7 +725,7 @@ function endBattle() {
     fadeOut(() => {
       currentMap = 'field';
       player.tx=9; player.ty=19; player.dx=9*TS; player.dy=19*TS;
-      clona.tx=9;  clona.ty=20;  clona.dx=9*TS;  clona.dy=20*TS;
+      clana.tx=9;  clana.ty=20;  clana.dx=9*TS;  clana.dy=20*TS;
       updateCamera();
       startBgm('field');
       runScript([
@@ -742,7 +742,7 @@ function endBattle() {
     MAP[19][11] = T.SIGN;
     fadeOut(() => {
       player.tx=9; player.ty=16; player.dx=9*TS; player.dy=16*TS;
-      clona.tx=9;  clona.ty=17;  clona.dx=9*TS;  clona.dy=17*TS;
+      clana.tx=9;  clana.ty=17;  clana.dx=9*TS;  clana.dy=17*TS;
       updateCamera();
       startBgm('field');
       gameState = 'walking';
@@ -766,7 +766,7 @@ function resetGame() {
   DUNGEON_MAP[17][9] = T.ITEM_C;
   // プレイヤー位置リセット
   player.tx=9; player.ty=20; player.dx=9*TS; player.dy=20*TS; player.dir=1; player.anim=0;
-  clona.tx=9;  clona.ty=21;  clona.dx=9*TS;  clona.dy=21*TS;  clona.dir=0;  clona.anim=0;
+  clana.tx=9;  clana.ty=21;  clana.dx=9*TS;  clana.dy=21*TS;  clana.dir=0;  clana.anim=0;
   updateCamera();
   // バトル状態リセット
   bt.enemyMaxHp=40; bt.enemyHp=40; bt.playerHp=bt.playerMaxHp;
@@ -1470,7 +1470,7 @@ function drawBattle() {
   ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(20,272,CW-40,58);
   ctx.strokeStyle='#003366'; ctx.lineWidth=1; ctx.strokeRect(20,272,CW-40,58);
   drawChar(38,240,0,'#c8763a','#ff8c40'); // Edeny (small, facing up)
-  drawChar(84,240,0,'#9966ff','#44aacc'); // Clona
+  drawChar(84,240,0,'#9966ff','#44aacc'); // Clana
   drawHpBar(130,282,200,16, bt.playerHp, bt.playerMaxHp, 'EDENY HP');
   ctx.fillStyle='#9966ff'; ctx.font='12px "Courier New"';
   ctx.fillText('CLANA  魔法: 準備完了',130,316);
@@ -1711,7 +1711,7 @@ const INTRO = [
 
 function update() {
   pollGamepad();
-  smoothStep(player); smoothStep(clona);
+  smoothStep(player); smoothStep(clana);
   updateCamera();
   updateFade();
   updateShake();
@@ -1747,7 +1747,7 @@ function draw() {
     drawMap();
     if (currentMap === 'field') for (const npc of NPCS)
       drawChar(npc.tx*TS-camX-8, npc.ty*TS-camY-16, npc.dir, npc.hairCol, npc.bodyCol, Date.now()*0.025+npc.tx);
-    drawChar(clona.dx-camX-8, clona.dy-camY-16, clona.dir, '#9966ff','#44aacc', clona.anim);
+    drawChar(clana.dx-camX-8, clana.dy-camY-16, clana.dir, '#9966ff','#44aacc', clana.anim);
     drawChar(player.dx-camX-8, player.dy-camY-16, player.dir,'#c8763a','#ff8c40', player.anim);
     drawHud();
     drawParticles();
