@@ -514,11 +514,11 @@ function update(dt){
   flashCells=flashCells.filter(f=>f.t>0);
   // merge msg
   if(mergeMsgTimer>0) mergeMsgTimer--;
-  // squish decay
+  if(gs!=='playing') return;
+
+  // squish decay (gridSquish is only valid after initGrid)
   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++)
     if(gridSquish[r][c]>0) gridSquish[r][c]=Math.max(0,gridSquish[r][c]-.055);
-
-  if(gs!=='playing') return;
 
   wobPhases=wobPhases.map((p,i)=>p+dt*.0035*(1+i*.25));
 
