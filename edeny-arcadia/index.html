@@ -34,7 +34,7 @@ const ctx = canvas.getContext('2d');
 const CW = 640, CH = 480, TS = 32;
 
 // ─── Tile IDs ─────────────────────────────────────────────────────────────────
-const T = { GRASS:0, TREE:1, PATH:2, WALL:3, DOOR:4, CHEST:5, POT:6, SIGN:8, FLOWER:9 };
+const T = { GRASS:0, TREE:1, PATH:2, WALL:3, DOOR:4, CHEST:5, POT:6, ONIGIRI:7, SIGN:8, FLOWER:9, STAIR:11, ITEM_A:12, ITEM_B:13, ITEM_C:14, CWALL:16 };
 const WALKABLE = new Set([0, 2, 4, 9]);
 
 // ─── Map (20 cols × 24 rows) ──────────────────────────────────────────────────
@@ -65,6 +65,34 @@ const MAP = [
 /* 23 */ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ];
 const MCOLS = 20, MROWS = 24;
+
+// ─── Dungeon Map (20 cols × 24 rows) ─────────────────────────────────────────
+const DUNGEON_MAP = [
+/* 00 */ [16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16],
+/* 01 */ [16,16,16,16,16,16,16,16,16,11,16,16,16,16,16,16,16,16,16,16],
+/* 02 */ [16,16,16,16,16,16,16,16,16, 2,16,16,16,16,16,16,16,16,16,16],
+/* 03 */ [16,16,16,16,16,16,16,16, 2, 2, 2,16,16,16,16,16,16,16,16,16],
+/* 04 */ [16,16,16,16,16,16,16, 2, 2, 2, 2, 2,16,16,16,16,16,16,16,16],
+/* 05 */ [16,16,16,16,16,16, 2, 2, 2, 2, 2, 2, 2,16,16,16,16,16,16,16],
+/* 06 */ [16,16,16,16,12, 2, 2, 2, 2, 2, 2, 2, 2, 2,16,16,16,16,16,16],
+/* 07 */ [16,16,16,16,16,16,16, 2, 2, 2, 2, 2,16,16,16,16,16,16,16,16],
+/* 08 */ [16,16,16,16,16,16,16, 2, 2, 2, 2, 2,16,16,16,16,16,16,16,16],
+/* 09 */ [16,16,16,16,16,16,16, 2, 2, 2, 2, 2, 2, 2, 2,13,16,16,16,16],
+/* 10 */ [16,16,16,16,16,16,16,16, 2, 2, 2,16,16,16,16,16,16,16,16,16],
+/* 11 */ [16,16,16,16,16,16,16,16, 2, 2, 2,16,16,16,16,16,16,16,16,16],
+/* 12 */ [16,16,16,16,16,16,16,16, 2, 2, 2,16,16,16,16,16,16,16,16,16],
+/* 13 */ [16,16,16,16,16,16,16,16, 2, 2, 2,16,16,16,16,16,16,16,16,16],
+/* 14 */ [16,16,16,16,16,16,16,16, 2, 2, 2,16,16,16,16,16,16,16,16,16],
+/* 15 */ [16,16,16,16,16,16,16,16, 2, 2, 2,16,16,16,16,16,16,16,16,16],
+/* 16 */ [16,16,16,16,16,16,16, 2, 2, 2, 2, 2,16,16,16,16,16,16,16,16],
+/* 17 */ [16,16,16,16,16,16,16, 2, 2,14, 2, 2,16,16,16,16,16,16,16,16],
+/* 18 */ [16,16,16,16,16,16,16, 2, 2, 2, 2, 2,16,16,16,16,16,16,16,16],
+/* 19 */ [16,16,16,16,16,16,16,16, 2, 2, 2,16,16,16,16,16,16,16,16,16],
+/* 20 */ [16,16,16,16,16,16,16,16, 2, 2, 2,16,16,16,16,16,16,16,16,16],
+/* 21 */ [16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16],
+/* 22 */ [16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16],
+/* 23 */ [16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16],
+];
 
 // ─── NPCs ─────────────────────────────────────────────────────────────────────
 const NPCS = [
@@ -118,6 +146,13 @@ let gold = 0;
 let bossTriggered = false;
 let bossDefeated  = false;
 let gameState = 'title'; // title|script|walking|battle|complete
+let chapter = 1;
+let currentMap = 'field'; // field|dungeon
+let dungeonItems = new Set(); // 'A','B','C'
+let dungeonBossTriggered = false;
+let battleType = 'shadow'; // shadow|golem
+
+function getMap() { return currentMap === 'dungeon' ? DUNGEON_MAP : MAP; }
 
 // ─── Input ────────────────────────────────────────────────────────────────────
 const keys = {};
@@ -219,22 +254,28 @@ const BATTLE_SONG=[
   [220,0.1],[0,0.05],[220,0.1],[0,0.05],[261.63,0.15],[220,0.1],[0,0.1],
   [174.61,0.2],[0,0.1],[196,0.2],[0,0.2],
 ];
+const DUNGEON_SONG=[
+  [196,0.45],[0,0.15],[164.81,0.3],[0,0.15],[146.83,0.45],[0,0.3],
+  [174.61,0.45],[0,0.15],[164.81,0.3],[0,0.15],[196,0.75],[0,0.3],
+  [220,0.45],[0,0.15],[196,0.3],[0,0.15],[174.61,0.45],[0,0.3],
+  [164.81,0.45],[0,0.15],[146.83,0.3],[0,0.15],[130.81,0.9],[0,0.45],
+];
 function bgmSchedule() {
   if (!bgmMode) return;
   const a=getAudio(), now=a.currentTime;
-  const song=bgmMode==='field'?FIELD_SONG:BATTLE_SONG;
+  const song=bgmMode==='field'?FIELD_SONG:bgmMode==='dungeon'?DUNGEON_SONG:BATTLE_SONG;
   while (bgmNextBeat < now+0.3) {
     const [freq,dur]=song[bgmStep%song.length];
     if (freq>0) {
       const o=a.createOscillator(), g=a.createGain();
       const t=bgmNextBeat;
-      o.type=bgmMode==='field'?'triangle':'square'; o.frequency.value=freq;
+      o.type=(bgmMode==='field'||bgmMode==='dungeon')?'triangle':'square'; o.frequency.value=freq;
       o.connect(g); g.connect(a.destination);
-      const v=bgmMode==='field'?0.038:0.022;
+      const v=bgmMode==='field'?0.038:bgmMode==='dungeon'?0.032:0.022;
       g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(v,t+0.015);
       g.gain.setValueAtTime(v,t+dur*0.72); g.gain.linearRampToValueAtTime(0,t+dur);
       o.start(t); o.stop(t+dur+0.01);
-      if (bgmMode==='field' && bgmStep%4===0) {
+      if ((bgmMode==='field'||bgmMode==='dungeon') && bgmStep%4===0) {
         const ob=a.createOscillator(), gb=a.createGain();
         ob.type='sine'; ob.frequency.value=freq/2;
         ob.connect(gb); gb.connect(a.destination);
@@ -354,7 +395,7 @@ function tryMove(ddx, ddy) {
   if (!isAtTarget(player)) return false;
   const nx = player.tx+ddx, ny = player.ty+ddy;
   if (nx<0||nx>=MCOLS||ny<0||ny>=MROWS) return false;
-  if (!WALKABLE.has(MAP[ny][nx])) return false;
+  if (!WALKABLE.has(getMap()[ny][nx])) return false;
   clona.tx = player.tx; clona.ty = player.ty; clona.dir = player.dir;
   clona.anim = player.anim + 2; // 少しずらしてリズムを変える
   player.tx = nx; player.ty = ny;
@@ -381,19 +422,22 @@ function handleMovement() {
 // ─── Interaction ──────────────────────────────────────────────────────────────
 function checkInteract() {
   if (!isAtTarget(player)) return;
-  // NPC（向いている方向のNPCのみ反応）
-  const foff = [[0,-1],[0,1],[-1,0],[1,0]][player.dir];
-  for (const npc of NPCS) {
-    if (player.tx+foff[0]===npc.tx && player.ty+foff[1]===npc.ty) {
-      const lines = npc.getLines ? npc.getLines() : npc.lines;
-      runScript(lines); return;
+  // NPC（向いている方向のNPCのみ反応、フィールドのみ）
+  if (currentMap === 'field') {
+    const foff = [[0,-1],[0,1],[-1,0],[1,0]][player.dir];
+    for (const npc of NPCS) {
+      if (player.tx+foff[0]===npc.tx && player.ty+foff[1]===npc.ty) {
+        const lines = npc.getLines ? npc.getLines() : npc.lines;
+        runScript(lines); return;
+      }
     }
   }
   // Facing tile
   const off = [[0,-1],[0,1],[-1,0],[1,0]][player.dir];
   const ftx = player.tx+off[0], fty = player.ty+off[1];
   if (ftx<0||ftx>=MCOLS||fty<0||fty>=MROWS) return;
-  const tile = MAP[fty][ftx];
+  const m = getMap();
+  const tile = m[fty][ftx];
   if (tile === T.CHEST) {
     MAP[fty][ftx] = T.PATH; gold += 50;
     addParticles(ftx*TS+TS/2, fty*TS+TS/2, GOLD_COLS, 14);
@@ -426,6 +470,58 @@ function checkInteract() {
       {speaker:'EDENY', col:'#ff8c40', text:'名前負けせんようにしないとな。'},
       {speaker:'CLANA', col:'#9966ff', text:'大丈夫です。あなたが言い出したんですから。'},
     ], () => { gameState = 'complete'; });
+  } else if (tile === T.ONIGIRI) {
+    MAP[fty][ftx] = T.GRASS;
+    seGold();
+    runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'おっ、おにぎり！　誰が置いたんやろ。'},
+      {speaker:'CLANA', col:'#9966ff', text:'エデニー、やめてください！　地面がっ──'},
+      {speaker:'', col:'#aaaaaa', text:'ズドーン！！'},
+    ], () => fadeOut(() => enterDungeon()));
+  } else if (tile === T.STAIR) {
+    const rem = 3 - dungeonItems.size;
+    if (rem > 0) {
+      runScript([
+        {speaker:'EDENY', col:'#ff8c40', text:'……階段か。上に出られそうやな。'},
+        {speaker:'CLANA', col:'#9966ff', text:`素材がまだ${rem}個残ってます。このまま出ますか？`},
+        {speaker:'EDENY', col:'#ff8c40', text:'……あとで戻れる。一旦出るか。'},
+      ], exitDungeon);
+    } else if (!dungeonBossTriggered) {
+      checkDungeonBossTrigger();
+    }
+  } else if (tile === T.ITEM_A) {
+    DUNGEON_MAP[fty][ftx] = T.PATH;
+    dungeonItems.add('A');
+    seChest();
+    addParticles(ftx*TS+TS/2, fty*TS+TS/2, ['#88aaff','#aaccff','#6688dd'], 16);
+    runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'石がある。「オッコチストーン」……何やこれ。'},
+      {speaker:'CLANA', col:'#9966ff', text:'古代の地脈石です。落ちた場所に戻る性質があるとか。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'ほな穴から出られるんちゃうか？'},
+      {speaker:'CLANA', col:'#9966ff', text:'使い方が分からないのでとりあえず持っときましょう。'},
+    ], checkDungeonBossTrigger);
+  } else if (tile === T.ITEM_B) {
+    DUNGEON_MAP[fty][ftx] = T.PATH;
+    dungeonItems.add('B');
+    seChest();
+    addParticles(ftx*TS+TS/2, fty*TS+TS/2, ['#ff9944','#ffaa66','#dd6622'], 16);
+    runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'何かあついな……「アチチモグラの皮」か。'},
+      {speaker:'CLANA', col:'#9966ff', text:'炎に強い素材です。楽園の建材になりますね。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'熱い名前やな。'},
+      {speaker:'CLANA', col:'#9966ff', text:'どこかで使えそうです、持っておきましょう。'},
+    ], checkDungeonBossTrigger);
+  } else if (tile === T.ITEM_C) {
+    DUNGEON_MAP[fty][ftx] = T.PATH;
+    dungeonItems.add('C');
+    seChest();
+    addParticles(ftx*TS+TS/2, fty*TS+TS/2, ['#cc88ff','#aa66dd','#7744bb'], 16);
+    runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'「泣虫ドラゴンの首輪」……泣き虫のドラゴンって弱そうやな。'},
+      {speaker:'CLANA', col:'#9966ff', text:'実は最強種です。悲しみに共感すると力が増すんです。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'……ゴーレムに似てるな。'},
+      {speaker:'CLANA', col:'#9966ff', text:'（はっとする）……そうですね。'},
+    ], checkDungeonBossTrigger);
   }
 }
 
@@ -442,27 +538,114 @@ function checkBossTrigger() {
   ], startBattle);
 }
 
+// ─── Chapter 2 functions ──────────────────────────────────────────────────────
+function enterDungeon() {
+  currentMap = 'dungeon';
+  player.tx=9; player.ty=3; player.dx=9*TS; player.dy=3*TS; player.dir=1;
+  clona.tx=9;  clona.ty=4;  clona.dx=9*TS;  clona.dy=4*TS;
+  updateCamera();
+  startBgm('dungeon');
+  runScript([
+    {speaker:'EDENY', col:'#ff8c40', text:'……痛っ。何やここ、暗い洞窟やんか。'},
+    {speaker:'CLANA', col:'#9966ff', text:'地下遺跡ですね。「古代遺跡の祠」……古い地図に載ってました。'},
+    {speaker:'EDENY', col:'#ff8c40', text:'なんで黙ってたんや！'},
+    {speaker:'CLANA', col:'#9966ff', text:'言う前に落ちたんです。おにぎりのせいで。'},
+    {speaker:'EDENY', col:'#ff8c40', text:'……宝はあるんか？'},
+    {speaker:'CLANA', col:'#9966ff', text:'素材が3つ眠ってるはずです。楽園の材料になります。'},
+    {speaker:'EDENY', col:'#ff8c40', text:'ほな拾って帰るで。'},
+  ], null);
+}
+
+function exitDungeon() {
+  fadeOut(() => {
+    currentMap = 'field';
+    player.tx=9; player.ty=20; player.dx=9*TS; player.dy=20*TS; player.dir=0;
+    clona.tx=9;  clona.ty=21;  clona.dx=9*TS;  clona.dy=21*TS;
+    updateCamera();
+    startBgm('field');
+    runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'……出てきた。地上や。'},
+      {speaker:'CLANA', col:'#9966ff', text:'階段、ちゃんと使えましたね。オッコチストーンのおかげかも。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'何もしてないぞそれ。'},
+    ], null);
+  });
+}
+
+function checkDungeonBossTrigger() {
+  if (dungeonBossTriggered || dungeonItems.size < 3) return;
+  runScript([
+    {speaker:'CLANA', col:'#9966ff', text:'エデニー……3つ全部揃いました。でも……何か気配が。'},
+    {speaker:'EDENY', col:'#ff8c40', text:'わかってる。奥から来てる。'},
+    {speaker:'', col:'#8899bb', text:'……ゆる……さぬ。この土地の宝を……'},
+    {speaker:'アングラゴーレム', col:'#8899bb', text:'貴様らには……渡せぬ。のっぱらは……ワシが守る。'},
+  ], startBattle2);
+}
+
+function startChapter2() {
+  chapter = 2;
+  currentMap = 'field';
+  MAP[21][9] = T.ONIGIRI;
+  player.tx=9; player.ty=18; player.dx=9*TS; player.dy=18*TS; player.dir=1; player.anim=0;
+  clona.tx=9;  clona.ty=19;  clona.dx=9*TS;  clona.dy=19*TS;  clona.dir=0;  clona.anim=0;
+  updateCamera();
+  particles.length=0; floatTexts.length=0; shakeAmt=0;
+  fadeAlpha=0; fadeDir=0; fadeCb=null;
+  startBgm('field');
+  runScript([
+    {speaker:'CLANA', col:'#9966ff', text:'エデニー……「のっぱら」の南の方、何か光ってますよ。'},
+    {speaker:'EDENY', col:'#ff8c40', text:'確か古代遺跡があるって話や。資材になるもんがあるかもな。'},
+    {speaker:'CLANA', col:'#9966ff', text:'え？　知ってるんですか？'},
+    {speaker:'EDENY', col:'#ff8c40', text:'ちょっと南に歩いてみるか。'},
+  ], null);
+}
+
 // ─── Battle ───────────────────────────────────────────────────────────────────
+const SHADOW_VICTORY = [
+  {speaker:'EDENY', col:'#ff8c40', text:'倒した。200G もらった。まあまあや。'},
+  {speaker:'CLANA', col:'#9966ff', text:'村を救った英雄の一言目がそれですか……'},
+  {speaker:'EDENY', col:'#ff8c40', text:'行くで。のっぱらに戻ろ。'},
+  {speaker:'CLANA', col:'#9966ff', text:'……「のっぱら」に何か立ってますよ。'},
+];
+const GOLEM_VICTORY = [
+  {speaker:'アングラゴーレム', col:'#8899bb', text:'……ぎゅ、ぎぃ……（崩れる音）'},
+  {speaker:'EDENY', col:'#ff8c40', text:'……なんか、かわいそうやな。'},
+  {speaker:'CLANA', col:'#9966ff', text:'ここを何百年も守ってたんですね。誰にも感謝されずに。'},
+  {speaker:'EDENY', col:'#ff8c40', text:'……黙ってろ。（目をそらす）'},
+  {speaker:'アングラゴーレム', col:'#8899bb', text:'…………の、っぱら……まも……る……'},
+  {speaker:'CLANA', col:'#9966ff', text:'あ……砂が……目に……'},
+  {speaker:'EDENY', col:'#ff8c40', text:'砂が入った（俺も）'},
+  {speaker:'CLANA', col:'#9966ff', text:'嘘おっしゃい。'},
+  {speaker:'EDENY', col:'#ff8c40', text:'……行こか。楽園、作ったる。のっぱらに。'},
+];
+
 const bt = {
   enemyMaxHp:40, enemyHp:40, playerMaxHp:30, playerHp:30,
   phase:'player_select', cursor:0, timer:0,
   log:'コマンドを選んでください',
   flashEnemy:0, flashPlayer:0,
-  victoryLines:[
-    {speaker:'EDENY', col:'#ff8c40', text:'倒した。200G もらった。まあまあや。'},
-    {speaker:'CLANA', col:'#9966ff', text:'村を救った英雄の一言目がそれですか……'},
-    {speaker:'EDENY', col:'#ff8c40', text:'行くで。のっぱらに戻ろ。'},
-    {speaker:'CLANA', col:'#9966ff', text:'……「のっぱら」に何か立ってますよ。'},
-  ],
+  victoryLines: SHADOW_VICTORY,
   victoryIdx:0, victoryProg:0,
 };
 
 function startBattle() {
-  bt.enemyHp = bt.enemyMaxHp; bt.playerHp = bt.playerMaxHp;
+  battleType = 'shadow';
+  bt.enemyMaxHp = 40; bt.enemyHp = 40; bt.playerHp = bt.playerMaxHp;
   bt.phase = 'player_select'; bt.cursor = 0; bt.timer = 0;
   bt.log = 'コマンドを選んでください';
   bt.flashEnemy = 0; bt.flashPlayer = 0;
-  bt.victoryIdx = 0; bt.victoryProg = 0;
+  bt.victoryLines = SHADOW_VICTORY; bt.victoryIdx = 0; bt.victoryProg = 0;
+  startBgm('battle');
+  gameState = 'battle';
+}
+
+function startBattle2() {
+  battleType = 'golem';
+  dungeonBossTriggered = true;
+  bt.enemyMaxHp = 80; bt.enemyHp = 80; bt.playerHp = bt.playerMaxHp;
+  bt.phase = 'player_select'; bt.cursor = 0; bt.timer = 0;
+  bt.log = 'コマンドを選んでください';
+  bt.flashEnemy = 0; bt.flashPlayer = 0;
+  bt.victoryLines = GOLEM_VICTORY; bt.victoryIdx = 0; bt.victoryProg = 0;
   startBgm('battle');
   gameState = 'battle';
 }
@@ -522,7 +705,8 @@ function updateBattle() {
       const prev = bt.playerHp;
       bt.playerHp = Math.max(1, bt.playerHp - dmg);
       bt.flashPlayer = 1.0;
-      bt.log = `謎の影の攻撃！ ${dmg} ダメージ！` + (prev - dmg <= 0 ? ' （なんとか生き残った！）' : '');
+      const attackMsg = battleType==='golem'?`アングラゴーレムの石拳！ ${dmg} ダメージ！`:`謎の影の攻撃！ ${dmg} ダメージ！`;
+      bt.log = attackMsg + (prev - dmg <= 0 ? ' （なんとか生き残った！）' : '');
       addFloatText(200, 258, `-${dmg}`, '#ff4444');
       seHit(); shake(8);
       bt.phase = 'enemy_attack'; bt.timer = 55;
@@ -536,31 +720,57 @@ function updateBattle() {
 }
 
 function endBattle() {
-  bossDefeated = true; gold += 200; floatTexts.length=0;
-  MAP[19][11] = T.SIGN; // 看板出現！
-  fadeOut(() => {
-    player.tx=9; player.ty=16; player.dx=9*TS; player.dy=16*TS;
-    clona.tx=9;  clona.ty=17;  clona.dx=9*TS;  clona.dy=17*TS;
-    updateCamera();
-    startBgm('field');
-    gameState = 'walking';
-  });
+  floatTexts.length = 0;
+  if (battleType === 'golem') {
+    fadeOut(() => {
+      currentMap = 'field';
+      player.tx=9; player.ty=19; player.dx=9*TS; player.dy=19*TS;
+      clona.tx=9;  clona.ty=20;  clona.dx=9*TS;  clona.dy=20*TS;
+      updateCamera();
+      startBgm('field');
+      runScript([
+        {speaker:'EDENY', col:'#ff8c40', text:'……出てきたな。地上や。'},
+        {speaker:'CLANA', col:'#9966ff', text:'……ゴーレム、ずっとひとりだったんですね。'},
+        {speaker:'EDENY', col:'#ff8c40', text:'楽園を作ったら、あいつの分も含めてやる。'},
+        {speaker:'CLANA', col:'#9966ff', text:'……「エデニーらしくない」とは言いません。'},
+        {speaker:'EDENY', col:'#ff8c40', text:'言うな。黙ってろ。'},
+        {speaker:'CLANA', col:'#9966ff', text:'（笑）……はい。一緒に作りましょう。'},
+      ], () => { gameState = 'complete'; });
+    });
+  } else {
+    bossDefeated = true; gold += 200;
+    MAP[19][11] = T.SIGN;
+    fadeOut(() => {
+      player.tx=9; player.ty=16; player.dx=9*TS; player.dy=16*TS;
+      clona.tx=9;  clona.ty=17;  clona.dx=9*TS;  clona.dy=17*TS;
+      updateCamera();
+      startBgm('field');
+      gameState = 'walking';
+    });
+  }
 }
 
 // ─── New Game Reset ───────────────────────────────────────────────────────────
 function resetGame() {
   gold = 0; bossTriggered = false; bossDefeated = false;
-  // マップアイテム復元
-  MAP[2][6]  = T.POT;
-  MAP[2][17] = T.CHEST;
-  MAP[19][11] = T.GRASS; // 看板を消す
+  chapter = 1; currentMap = 'field';
+  dungeonItems = new Set(); dungeonBossTriggered = false; battleType = 'shadow';
+  // フィールドマップアイテム復元
+  MAP[2][6]   = T.POT;
+  MAP[2][17]  = T.CHEST;
+  MAP[19][11] = T.GRASS;
+  MAP[21][9]  = T.GRASS;
+  // ダンジョンマップアイテム復元
+  DUNGEON_MAP[6][4]  = T.ITEM_A;
+  DUNGEON_MAP[9][15] = T.ITEM_B;
+  DUNGEON_MAP[17][9] = T.ITEM_C;
   // プレイヤー位置リセット
   player.tx=9; player.ty=20; player.dx=9*TS; player.dy=20*TS; player.dir=1; player.anim=0;
   clona.tx=9;  clona.ty=21;  clona.dx=9*TS;  clona.dy=21*TS;  clona.dir=0;  clona.anim=0;
   updateCamera();
   // バトル状態リセット
-  bt.enemyHp=bt.enemyMaxHp; bt.playerHp=bt.playerMaxHp;
-  bt.phase='player_select'; bt.victoryIdx=0; bt.victoryProg=0;
+  bt.enemyMaxHp=40; bt.enemyHp=40; bt.playerHp=bt.playerMaxHp;
+  bt.victoryLines=SHADOW_VICTORY; bt.phase='player_select'; bt.victoryIdx=0; bt.victoryProg=0;
   // スクリプト・演出リセット
   script=null; scriptIdx=0; scriptProg=0;
   particles.length=0; floatTexts.length=0; shakeAmt=0;
@@ -667,14 +877,94 @@ function drawTile(id, px, py) {
       ctx.fillStyle='#ffdd44'; ctx.beginPath(); ctx.arc(px+8,py+22,3,0,Math.PI*2); ctx.fill();
       ctx.fillStyle='#ff88aa'; ctx.beginPath(); ctx.arc(px+22,py+16,3,0,Math.PI*2); ctx.fill();
       break;
+    case T.ONIGIRI:
+      ctx.fillStyle='#2d5a1b'; ctx.fillRect(px,py,TS,TS);
+      ctx.fillStyle='rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.ellipse(px+16,py+25,10,4,0,0,Math.PI*2); ctx.fill();
+      // seaweed
+      ctx.fillStyle='#1a2a10'; ctx.beginPath(); ctx.moveTo(px+6,py+24); ctx.lineTo(px+26,py+24); ctx.lineTo(px+26,py+29); ctx.lineTo(px+6,py+29); ctx.closePath(); ctx.fill();
+      // rice body
+      ctx.fillStyle='#f0f0e8';
+      ctx.beginPath(); ctx.moveTo(px+16,py+8); ctx.lineTo(px+26,py+25); ctx.lineTo(px+6,py+25); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.arc(px+16,py+21,10,Math.PI,0,false); ctx.fill();
+      // highlight
+      ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.ellipse(px+12,py+14,3,5,0.3,0,Math.PI*2); ctx.fill();
+      // sesame
+      ctx.fillStyle='#888'; ctx.fillRect(px+14,py+12,2,2);
+      break;
+    case T.CWALL:
+      ctx.fillStyle='#1a1410'; ctx.fillRect(px,py,TS,TS);
+      ctx.fillStyle='#252015';
+      ctx.fillRect(px,py,TS,8); ctx.fillRect(px,py+12,TS,8); ctx.fillRect(px,py+24,TS,8);
+      ctx.strokeStyle='#0d0a08'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(px+8,py); ctx.lineTo(px+8,py+8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px+20,py+12); ctx.lineTo(px+20,py+20); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px+14,py+24); ctx.lineTo(px+14,py+32); ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(px,py,TS,4);
+      break;
+    case T.STAIR: {
+      ctx.fillStyle='#3a3028'; ctx.fillRect(px,py,TS,TS);
+      const steps=4, sh=Math.floor(TS/steps);
+      for(let i=0;i<steps;i++){
+        const sy=py+TS-sh*(i+1);
+        const shade=0x28+i*0x10;
+        ctx.fillStyle=`rgb(${shade},${Math.floor(shade*0.85)},${Math.floor(shade*0.7)})`;
+        ctx.fillRect(px+i*3,sy,TS-i*6,sh);
+        ctx.fillStyle='rgba(255,255,255,0.12)';
+        ctx.fillRect(px+i*3,sy,TS-i*6,2);
+      }
+      ctx.fillStyle='rgba(0,180,140,0.4)';
+      ctx.font='11px monospace'; ctx.textAlign='center';
+      ctx.fillText('↑',px+16,py+16);
+      ctx.textAlign='left';
+      break;
+    }
+    case T.ITEM_A: {// オッコチストーン
+      ctx.fillStyle='#2a2218'; ctx.fillRect(px,py,TS,TS);
+      const ag=ctx.createRadialGradient(px+16,py+18,2,px+16,py+18,12);
+      ag.addColorStop(0,'rgba(100,160,255,0.8)'); ag.addColorStop(1,'rgba(40,80,180,0)');
+      ctx.fillStyle=ag; ctx.beginPath(); ctx.arc(px+16,py+18,12,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#8899cc';
+      ctx.beginPath(); ctx.moveTo(px+16,py+9); ctx.lineTo(px+22,py+20); ctx.lineTo(px+10,py+20); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#aabbee';
+      ctx.beginPath(); ctx.moveTo(px+16,py+11); ctx.lineTo(px+20,py+19); ctx.lineTo(px+12,py+19); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='rgba(180,210,255,0.7)'; ctx.beginPath(); ctx.ellipse(px+13,py+14,2,3,0,0,Math.PI*2); ctx.fill();
+      break;
+    }
+    case T.ITEM_B: {// アチチモグラの皮
+      ctx.fillStyle='#2a2218'; ctx.fillRect(px,py,TS,TS);
+      const bg2=ctx.createRadialGradient(px+16,py+18,2,px+16,py+18,13);
+      bg2.addColorStop(0,'rgba(255,140,40,0.7)'); bg2.addColorStop(1,'rgba(180,60,0,0)');
+      ctx.fillStyle=bg2; ctx.beginPath(); ctx.arc(px+16,py+18,13,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#aa6633'; ctx.beginPath(); ctx.ellipse(px+16,py+19,10,8,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#cc8844'; ctx.beginPath(); ctx.ellipse(px+14,py+17,6,5,0.2,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#884422'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(px+10,py+15); ctx.lineTo(px+16,py+25); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px+20,py+14); ctx.lineTo(px+18,py+24); ctx.stroke();
+      ctx.fillStyle='rgba(255,160,60,0.5)'; ctx.beginPath(); ctx.ellipse(px+16,py+26,4,2,0,0,Math.PI*2); ctx.fill();
+      break;
+    }
+    case T.ITEM_C: {// 泣虫ドラゴンの首輪
+      ctx.fillStyle='#2a2218'; ctx.fillRect(px,py,TS,TS);
+      const cg=ctx.createRadialGradient(px+16,py+18,2,px+16,py+18,13);
+      cg.addColorStop(0,'rgba(160,80,255,0.7)'); cg.addColorStop(1,'rgba(60,0,120,0)');
+      ctx.fillStyle=cg; ctx.beginPath(); ctx.arc(px+16,py+18,13,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#9944cc'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.arc(px+16,py+18,9,0,Math.PI*2); ctx.stroke();
+      ctx.fillStyle='#cc66ff';
+      for(let i=0;i<6;i++){const ang=i*Math.PI/3; ctx.beginPath(); ctx.arc(px+16+Math.cos(ang)*9,py+18+Math.sin(ang)*9,2,0,Math.PI*2); ctx.fill();}
+      ctx.fillStyle='rgba(100,180,255,0.8)';
+      ctx.beginPath(); ctx.moveTo(px+16,py+20); ctx.lineTo(px+14,py+26); ctx.lineTo(px+18,py+26); ctx.closePath(); ctx.fill();
+      break;
+    }
     default:
       ctx.fillStyle='#333'; ctx.fillRect(px,py,TS,TS);
   }
 }
 function drawMap() {
+  const m=getMap();
   const c0=Math.max(0,Math.floor(camX/TS)), c1=Math.min(MCOLS,Math.ceil((camX+CW)/TS)+1);
   const r0=Math.max(0,Math.floor(camY/TS)), r1=Math.min(MROWS,Math.ceil((camY+CH)/TS)+1);
-  for (let r=r0;r<r1;r++) for (let c=c0;c<c1;c++) drawTile(MAP[r][c],c*TS-camX,r*TS-camY);
+  for (let r=r0;r<r1;r++) for (let c=c0;c<c1;c++) drawTile(m[r][c],c*TS-camX,r*TS-camY);
 }
 
 // ─── Character drawing ────────────────────────────────────────────────────────
@@ -736,6 +1026,58 @@ function drawBoss(flashAlpha) {
     ctx.globalAlpha = Math.max(0, flashAlpha) * 0.75;
     ctx.fillStyle='#ffffff';
     ctx.beginPath(); ctx.ellipse(bx,by,68,65,0,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+}
+
+// ─── Golem drawing ────────────────────────────────────────────────────────────
+function drawGolem(flashAlpha) {
+  const gx=CW/2, gy=162;
+  ctx.save(); ctx.translate(gx, gy);
+  ctx.shadowColor='#334466'; ctx.shadowBlur=30;
+  // Body
+  ctx.fillStyle='#7a7060'; ctx.beginPath(); ctx.ellipse(0,0,52,60,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#5c5448'; ctx.beginPath(); ctx.ellipse(0,0,42,50,0,0,Math.PI*2); ctx.fill();
+  // Stone cracks
+  ctx.strokeStyle='#3a3028'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(-22,-28); ctx.lineTo(-8,2); ctx.lineTo(-18,22); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(18,-22); ctx.lineTo(26,8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-5,-40); ctx.lineTo(5,-15); ctx.stroke();
+  // Priestly collar/robe
+  ctx.fillStyle='#6a5a40';
+  ctx.beginPath(); ctx.ellipse(0,38,36,16,0,0,Math.PI); ctx.fill();
+  ctx.strokeStyle='#8a7a50'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(0,38,30,Math.PI+0.4,Math.PI*2-0.4); ctx.stroke();
+  // Arms
+  ctx.fillStyle='#7a7060';
+  ctx.beginPath(); ctx.ellipse(-52,8,18,12,0.4,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 52,8,18,12,-0.4,0,Math.PI*2); ctx.fill();
+  // Head
+  ctx.shadowColor='#223344'; ctx.shadowBlur=10;
+  ctx.fillStyle='#8a8070'; ctx.beginPath(); ctx.ellipse(0,-62,28,26,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#6a6058'; ctx.beginPath(); ctx.ellipse(0,-62,22,20,0,0,Math.PI*2); ctx.fill();
+  // Moss on head
+  ctx.fillStyle='#3a5a2a';
+  ctx.beginPath(); ctx.ellipse(-10,-82,10,5,-0.3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(12,-85,8,4,0.2,0,Math.PI*2); ctx.fill();
+  // Sad blue eyes
+  const pulse=Math.sin(Date.now()*0.002)*0.3+0.7;
+  ctx.shadowColor='#4488ff'; ctx.shadowBlur=22;
+  ctx.fillStyle=`rgba(80,140,255,${pulse})`;
+  ctx.beginPath(); ctx.ellipse(-11,-62,9,7,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 11,-62,9,7,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=`rgba(160,200,255,${pulse*0.85})`;
+  ctx.beginPath(); ctx.ellipse(-11,-62,4,3,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 11,-62,4,3,0,0,Math.PI*2); ctx.fill();
+  // Teardrop
+  const td=((Date.now()*0.028)%20);
+  ctx.fillStyle=`rgba(100,160,255,0.55)`;
+  ctx.beginPath(); ctx.ellipse(-11,-55+td,2,3,0,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0; ctx.restore();
+  if (flashAlpha > 0) {
+    ctx.globalAlpha=Math.max(0,flashAlpha)*0.75;
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath(); ctx.ellipse(gx,gy-10,60,68,0,0,Math.PI*2); ctx.fill();
     ctx.globalAlpha=1;
   }
 }
@@ -1044,6 +1386,26 @@ function drawTitle() {
 
 // ─── HUD ──────────────────────────────────────────────────────────────────────
 function drawHud() {
+  if (currentMap === 'dungeon') {
+    ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(8,8,185,26);
+    ctx.fillStyle='#8899cc'; ctx.font='13px "Courier New"'; ctx.fillText('🏛️ 古代遺跡の祠',14,26);
+    ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(CW-140,8,132,26);
+    ctx.fillStyle='#aaccff'; ctx.font='13px "Courier New"'; ctx.fillText(`💎 ${dungeonItems.size}/3 素材`,CW-132,26);
+    if (gameState==='walking') {
+      const off=[[0,-1],[0,1],[-1,0],[1,0]][player.dir];
+      const ftx=player.tx+off[0], fty=player.ty+off[1];
+      if (ftx>=0&&ftx<MCOLS&&fty>=0&&fty<MROWS) {
+        const tid=DUNGEON_MAP[fty][ftx];
+        if (tid===T.STAIR||tid===T.ITEM_A||tid===T.ITEM_B||tid===T.ITEM_C) {
+          const label=tid===T.STAIR?'階段を上る（出口）':'素材を拾う';
+          ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(CW/2-100,CH-52,200,28);
+          ctx.fillStyle='#ffdd44'; ctx.font='12px "Courier New"';
+          ctx.textAlign='center'; ctx.fillText(`[SPACE] ${label}`,CW/2,CH-34); ctx.textAlign='left';
+        }
+      }
+    }
+    return;
+  }
   const loc = player.ty<6?'🏘️ 村': player.ty<14?'🌲 森の道':'🌿 のっぱら';
   ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(8,8,150,26);
   ctx.fillStyle='#00d4aa'; ctx.font='13px "Courier New"'; ctx.fillText(loc,14,26);
@@ -1062,9 +1424,9 @@ function drawHud() {
     const off=[[0,-1],[0,1],[-1,0],[1,0]][player.dir];
     const ftx=player.tx+off[0], fty=player.ty+off[1];
     if (ftx>=0&&ftx<MCOLS&&fty>=0&&fty<MROWS) {
-      const t=MAP[fty][ftx];
-      if (t===T.CHEST||t===T.POT||t===T.SIGN) {
-        const label=t===T.CHEST?'宝箱を開ける':t===T.POT?'ツボを割る':'看板を読む';
+      const tid=MAP[fty][ftx];
+      if (tid===T.CHEST||tid===T.POT||tid===T.SIGN||tid===T.ONIGIRI) {
+        const label=tid===T.CHEST?'宝箱を開ける':tid===T.POT?'ツボを割る':tid===T.ONIGIRI?'おにぎりを拾う':'看板を読む';
         ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(CW/2-100,CH-52,200,28);
         ctx.fillStyle='#ffdd44'; ctx.font='12px "Courier New"';
         ctx.textAlign='center'; ctx.fillText(`[SPACE] ${label}`,CW/2,CH-34); ctx.textAlign='left';
@@ -1084,18 +1446,23 @@ function drawBattle() {
     ctx.fillStyle=`rgba(180,150,255,${0.2+i%3*0.15})`;
     ctx.fillRect((i*173)%CW,(i*97)%(CH*0.7),1,1);
   }
-  // Boss name & HP
+  // Enemy name & HP
+  const isGolem = battleType==='golem';
+  const enemyBorderCol = isGolem?'#335577':'#440088';
+  const enemyNameCol   = isGolem?'#8899bb':'#cc66ff';
+  const enemyNameText  = isGolem?'アングラゴーレム  古代の守護者':'??? 謎の影';
   ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(20,20,CW-40,44);
-  ctx.strokeStyle='#440088'; ctx.lineWidth=1; ctx.strokeRect(20,20,CW-40,44);
-  ctx.fillStyle='#cc66ff'; ctx.font='bold 16px "Courier New"';
-  ctx.textAlign='left'; ctx.fillText('??? 謎の影',32,42);
-  drawHpBar(220,28,CW-260,16, bt.enemyHp, bt.enemyMaxHp, '');
-  ctx.fillStyle='#aa88cc'; ctx.font='12px "Courier New"';
+  ctx.strokeStyle=enemyBorderCol; ctx.lineWidth=1; ctx.strokeRect(20,20,CW-40,44);
+  ctx.fillStyle=enemyNameCol; ctx.font='bold 16px "Courier New"';
+  ctx.textAlign='left'; ctx.fillText(enemyNameText,32,42);
+  drawHpBar(isGolem?280:220,28,CW-(isGolem?320:260),16, bt.enemyHp, bt.enemyMaxHp, '');
+  ctx.fillStyle=isGolem?'#7788aa':'#aa88cc'; ctx.font='12px "Courier New"';
   ctx.textAlign='right'; ctx.fillText(`${bt.enemyHp}/${bt.enemyMaxHp}`,CW-28,42); ctx.textAlign='left';
 
-  // Boss character（勝利ダイアログ中は消す）
+  // Enemy character（勝利ダイアログ中は消す）
   if (bt.phase !== 'victory_dialog') {
-    drawBoss(bt.flashEnemy);
+    if (isGolem) drawGolem(bt.flashEnemy);
+    else drawBoss(bt.flashEnemy);
   }
   drawFloatTexts();
 
@@ -1243,6 +1610,79 @@ function drawComplete() {
   ctx.textAlign='left'; ctx.shadowBlur=0;
 }
 
+// ─── Chapter 2 Complete screen ────────────────────────────────────────────────
+function drawComplete2() {
+  const now=Date.now(), t=now*0.001;
+  // 背景
+  const bg=ctx.createLinearGradient(0,0,0,CH);
+  bg.addColorStop(0,'#010210'); bg.addColorStop(0.6,'#060b22'); bg.addColorStop(1,'#0a1018');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,CW,CH);
+  // 星
+  for(let i=0;i<130;i++){
+    const tw=Math.sin(t*(0.8+i%5*0.3)+i)*0.5+0.5;
+    ctx.fillStyle=`rgba(255,255,255,${(0.3+tw*0.5)*(i%20===0?0.9:0.5)})`;
+    ctx.fillRect((i*173)%CW,(i*97)%CH,i%11===0?2:1,i%11===0?2:1);
+  }
+  // 地平線グロー（青みがかった）
+  const hor=ctx.createRadialGradient(CW/2,CH,0,CW/2,CH,CW*0.9);
+  hor.addColorStop(0,'rgba(60,100,255,0.18)'); hor.addColorStop(0.45,'rgba(20,40,120,0.08)'); hor.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=hor; ctx.fillRect(0,0,CW,CH);
+  // 地面
+  const grd2=ctx.createLinearGradient(0,390,0,CH);
+  grd2.addColorStop(0,'#1a3a10'); grd2.addColorStop(1,'#0a1a06');
+  ctx.fillStyle=grd2; ctx.fillRect(0,400,CW,CH-400);
+  ctx.strokeStyle='rgba(70,180,50,0.45)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,401); ctx.lineTo(CW,401); ctx.stroke();
+  // ゴーレムの記念碑（小さな石）
+  ctx.fillStyle='#5c5448'; ctx.beginPath(); ctx.ellipse(CW/2,405,24,8,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#7a7060'; ctx.fillRect(CW/2-12,386,24,20);
+  ctx.fillStyle='rgba(80,140,255,0.5)'; ctx.beginPath(); ctx.arc(CW/2,382,5,0,Math.PI*2); ctx.fill();
+  const tearDrop=((t*20)%15);
+  ctx.fillStyle='rgba(100,160,255,0.4)'; ctx.beginPath(); ctx.ellipse(CW/2,382+tearDrop,2,3,0,0,Math.PI*2); ctx.fill();
+  // エデニー（左）
+  const bob=Math.sin(t*1.5)*3;
+  ctx.fillStyle='rgba(255,140,64,0.1)'; ctx.beginPath(); ctx.ellipse(145,401,36,8,0,0,Math.PI*2); ctx.fill();
+  ctx.save(); ctx.translate(145,394+bob); ctx.scale(3,3);
+  drawChar(-12,-30,3,'#c8763a','#ff8c40',t*20); ctx.restore();
+  ctx.textAlign='center';
+  ctx.shadowColor='#ff8c40'; ctx.shadowBlur=6;
+  ctx.fillStyle='#ff8c40'; ctx.font='bold 11px "Courier New"'; ctx.fillText('Edeny',145,440+bob);
+  // クラナ（右）
+  ctx.fillStyle='rgba(153,102,255,0.1)'; ctx.beginPath(); ctx.ellipse(495,401,36,8,0,0,Math.PI*2); ctx.fill();
+  ctx.save(); ctx.translate(495,394-bob); ctx.scale(3,3);
+  drawChar(-12,-30,2,'#bb88ff','#44aacc',t*20+3); ctx.restore();
+  for(let i=0;i<4;i++){
+    const ang=t*1.5+i*1.57, r=26+Math.sin(t*2+i)*7;
+    ctx.fillStyle=`rgba(200,160,255,${Math.sin(t*2+i*1.5)*0.4+0.6})`;
+    ctx.fillRect(Math.round(495+Math.cos(ang)*r)-1,Math.round((394-bob)-8+Math.sin(ang)*r*0.4)-1,3,3);
+  }
+  ctx.shadowColor='#bb88ff'; ctx.shadowBlur=6;
+  ctx.fillStyle='#bb88ff'; ctx.font='bold 11px "Courier New"'; ctx.fillText('Clana',495,440-bob);
+  ctx.shadowBlur=0;
+  // テキストパネル
+  ctx.fillStyle='rgba(2,4,20,0.90)'; ctx.fillRect(CW/2-200,40,400,252);
+  ctx.strokeStyle='rgba(80,130,255,0.45)'; ctx.lineWidth=1; ctx.strokeRect(CW/2-200,40,400,252);
+  ctx.shadowColor='#6688ff'; ctx.shadowBlur=18+Math.sin(t)*5;
+  ctx.fillStyle='#aabbff'; ctx.font='bold 13px "Courier New"'; ctx.fillText('CHAPTER  2  CLEAR',CW/2,80);
+  ctx.shadowColor='#ff8c40'; ctx.shadowBlur=14;
+  ctx.fillStyle='#ff8c40'; ctx.font='bold 22px "Courier New"'; ctx.fillText('古代遺跡の祠',CW/2,116);
+  ctx.shadowBlur=0;
+  ctx.fillStyle='rgba(0,212,170,0.25)'; ctx.fillRect(CW/2-175,132,350,1);
+  ctx.fillStyle='rgba(180,200,255,0.85)'; ctx.font='13px "Noto Sans JP","Courier New",sans-serif';
+  ctx.fillText('アングラゴーレム、解放された',CW/2,158);
+  ctx.fillStyle='rgba(255,200,100,0.8)'; ctx.font='12px "Courier New"';
+  ctx.fillText(`💎 素材 3/3 収集完了　💰 ${gold} G`,CW/2,186);
+  ctx.fillStyle='rgba(255,140,64,0.8)'; ctx.font='12px "Noto Sans JP","Courier New",sans-serif';
+  ctx.fillText('「楽園、作ったる。あいつの分も含めて。」',CW/2,216);
+  ctx.fillStyle='rgba(170,140,220,0.75)';
+  ctx.fillText('（クラナ、初めて泣き笑いをした）',CW/2,244);
+  if (Math.floor(now/500)%2===0) {
+    ctx.fillStyle='rgba(150,160,200,0.75)'; ctx.font='12px "Courier New"';
+    ctx.fillText('PRESS  ANY  KEY',CW/2,316);
+  }
+  ctx.textAlign='left'; ctx.shadowBlur=0;
+}
+
 // ─── Gamepad ──────────────────────────────────────────────────────────────────
 let prevGpA=false, prevGpLeft=false, prevGpRight=false;
 function pollGamepad() {
@@ -1285,7 +1725,7 @@ function update() {
     if      (gameState==='title')    { getAudio(); runScript(INTRO, ()=>startBgm('field')); }
     else if (gameState==='script')   { advanceScript(); }
     else if (gameState==='walking')  { checkInteract(); }
-    else if (gameState==='complete') { resetGame(); }
+    else if (gameState==='complete') { if (chapter===1) startChapter2(); else resetGame(); }
   }
   justPressed={};
 }
@@ -1299,13 +1739,13 @@ function draw() {
   if (gameState==='title') {
     drawTitle();
   } else if (gameState==='complete') {
-    drawComplete();
+    if (chapter===2) drawComplete2(); else drawComplete();
   } else if (gameState==='battle') {
     drawBattle();
   } else {
     // map scene (walking / script)
     drawMap();
-    for (const npc of NPCS)
+    if (currentMap === 'field') for (const npc of NPCS)
       drawChar(npc.tx*TS-camX-8, npc.ty*TS-camY-16, npc.dir, npc.hairCol, npc.bodyCol, Date.now()*0.025+npc.tx);
     drawChar(clona.dx-camX-8, clona.dy-camY-16, clona.dir, '#9966ff','#44aacc', clona.anim);
     drawChar(player.dx-camX-8, player.dy-camY-16, player.dir,'#c8763a','#ff8c40', player.anim);
