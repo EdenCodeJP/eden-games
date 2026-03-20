@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edeny Arcadia</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#0a0e14;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:flex-start;
+    min-height:100vh; padding:8px 0;
+    font-family:'Courier New', monospace;
+  }
+  canvas {
+    border:2px solid #00d4aa;
+    box-shadow:0 0 40px rgba(0,212,170,0.3), 0 0 80px rgba(0,212,170,0.1);
+    image-rendering:pixelated;
+  }
+  #credit { margin-top:8px; font-size:11px; color:rgba(0,212,170,0.5); letter-spacing:2px; }
+</style>
+</head>
+<body>
+<canvas id="c" width="640" height="480"></canvas>
+<div id="credit">Edeny Arcadia © 2026 EdenCode</div>
+<script>
+/**
+ * Edeny Arcadia — © 2026 EdenCode
+ * © 2026 EdenCode
+ */
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const CW = 640, CH = 480, TS = 32;
+
+// ─── Tile IDs ─────────────────────────────────────────────────────────────────
+const T = { GRASS:0, TREE:1, PATH:2, WALL:3, DOOR:4, CHEST:5, POT:6, SIGN:8, FLOWER:9 };
+const WALKABLE = new Set([0, 2, 4, 9]);
+
+// ─── Map (20 cols × 24 rows) ──────────────────────────────────────────────────
+const MAP = [
+/* 00 */ [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+/* 01 */ [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+/* 02 */ [1,2,3,3,3,2,6,2,3,3,3,2,2,3,3,3,2,5,2,1],
+/* 03 */ [1,2,3,4,3,2,2,2,3,4,3,2,2,3,4,3,2,2,2,1],
+/* 04 */ [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+/* 05 */ [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+/* 06 */ [1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1],
+/* 07 */ [1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1],
+/* 08 */ [1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1],
+/* 09 */ [1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1],
+/* 10 */ [1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1],
+/* 11 */ [1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1],
+/* 12 */ [1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1],
+/* 13 */ [1,1,1,1,1,1,1,1,2,2,2,1,1,1,1,1,1,1,1,1],
+/* 14 */ [0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0],
+/* 15 */ [0,0,9,0,0,0,0,0,0,2,0,0,0,9,0,0,0,9,0,0],
+/* 16 */ [0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0],
+/* 17 */ [0,0,0,9,0,0,0,0,0,2,0,9,0,0,0,0,0,0,0,0],
+/* 18 */ [0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0],
+/* 19 */ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+/* 20 */ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+/* 21 */ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+/* 22 */ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+/* 23 */ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+];
+const MCOLS = 20, MROWS = 24;
+
+// ─── NPCs ─────────────────────────────────────────────────────────────────────
+const NPCS = [
+  { tx:10, ty:5, dir:1, hairCol:'#996633', bodyCol:'#338866', name:'村人A',
+    getLines() {
+      if (bossDefeated) return [
+        {speaker:'村人A', col:'#aaccaa', text:'あんた、ほんまに村を救ってくれたんか……ありがとな。'},
+        {speaker:'村人A', col:'#aaccaa', text:'タンスの件は……まあ、英雄やし。帳消しにしといたるわ。（複雑）'},
+      ];
+      if (bossTriggered) return [
+        {speaker:'村人A', col:'#aaccaa', text:'あの化け物、なんとかしてくれ！　お礼はするから！！'},
+      ];
+      return [{speaker:'村人A', col:'#aaccaa', text:'……また来たんか！！　宝箱に鍵つけたったわ！！'}];
+    }},
+  { tx:6,  ty:4, dir:3, hairCol:'#cc8833', bodyCol:'#4488cc', name:'村人B',
+    getLines() {
+      if (bossDefeated) return [
+        {speaker:'村人B', col:'#aaccaa', text:'あの勇者さん……目は笑ってへんけど、確かに強かったな。'},
+      ];
+      return [{speaker:'村人B', col:'#aaccaa', text:'最近、村の北で怪しい気配がするらしいで。気ぃつけや。'}];
+    }},
+  { tx:4,  ty:5, dir:1, hairCol:'#dddddd', bodyCol:'#886644', name:'おじいさん',
+    getLines() {
+      if (bossDefeated) return [
+        {speaker:'おじいさん', col:'#ccccaa', text:'ワシはずっとここに住んどる。こんな晴れやかな日は久しぶりじゃ。'},
+        {speaker:'おじいさん', col:'#ccccaa', text:'……「のっぱら」に何か建つんか？楽しみじゃのう。'},
+      ];
+      return [
+        {speaker:'おじいさん', col:'#ccccaa', text:'昔、ここには大きな楽園があったそうじゃ。'},
+        {speaker:'おじいさん', col:'#ccccaa', text:'ワシが生まれる前の話じゃがな……。'},
+      ];
+    }},
+  { tx:14, ty:5, dir:1, hairCol:'#ffaa44', bodyCol:'#ff6677', name:'子ども',
+    getLines() {
+      if (bossDefeated) return [
+        {speaker:'子ども', col:'#ffccaa', text:'おじちゃん強かったー！！'},
+        {speaker:'子ども', col:'#ffccaa', text:'ぼくも勇者になる！！'},
+      ];
+      if (bossTriggered) return [
+        {speaker:'子ども', col:'#ffccaa', text:'こわいー！！お母さーん！！'},
+      ];
+      return [
+        {speaker:'子ども', col:'#ffccaa', text:'ねえねえ、「のっぱら」って何があるの？'},
+        {speaker:'子ども', col:'#ffccaa', text:'お父さんが「行くな」って言うんだけど……'},
+      ];
+    }},
+];
+
+// ─── Game variables ───────────────────────────────────────────────────────────
+let gold = 0;
+let bossTriggered = false;
+let bossDefeated  = false;
+let gameState = 'title'; // title|script|walking|battle|complete
+
+// ─── Input ────────────────────────────────────────────────────────────────────
+const keys = {};
+let justPressed = {};
+document.addEventListener('keydown', e => {
+  if (!keys[e.code]) justPressed[e.code] = true;
+  keys[e.code] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ─── Unified script / dialog system ──────────────────────────────────────────
+let script = null, scriptIdx = 0, scriptProg = 0;
+
+function runScript(lines, onDone) {
+  script = { lines, onDone: onDone || null };
+  scriptIdx = 0; scriptProg = 0;
+  gameState = 'script';
+}
+function advanceScript() {
+  if (!script) return;
+  const line = script.lines[scriptIdx];
+  if (scriptProg < line.text.length) { scriptProg = line.text.length; return; }
+  scriptIdx++;  scriptProg = 0;
+  if (scriptIdx >= script.lines.length) {
+    const cb = script.onDone;
+    script = null;
+    gameState = 'walking';
+    if (cb) cb();
+  }
+}
+
+// ─── Fade system ──────────────────────────────────────────────────────────────
+let fadeAlpha = 0, fadeDir = 0, fadeCb = null;
+function fadeOut(cb) { fadeAlpha = 0; fadeDir = 1; fadeCb = cb; }
+function updateFade() {
+  if (fadeDir === 1) {
+    fadeAlpha = Math.min(1, fadeAlpha + 0.04);
+    if (fadeAlpha >= 1) { fadeDir = -1; if (fadeCb) { fadeCb(); fadeCb = null; } }
+  } else if (fadeDir === -1) {
+    fadeAlpha = Math.max(0, fadeAlpha - 0.04);
+    if (fadeAlpha <= 0) fadeDir = 0;
+  }
+}
+
+// ─── Audio ────────────────────────────────────────────────────────────────────
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function beep(freq, dur, vol=0.08, type='triangle', when=0) {
+  const a=getAudio(), o=a.createOscillator(), g=a.createGain();
+  const t=a.currentTime+when;
+  o.type=type; o.frequency.value=freq;
+  o.connect(g); g.connect(a.destination);
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+0.01);
+  g.gain.setValueAtTime(vol,t+Math.max(dur-0.03,0.01)); g.gain.linearRampToValueAtTime(0,t+dur);
+  o.start(t); o.stop(t+dur+0.01);
+}
+function seDialogTick() { beep(1320,0.04,0.022,'square'); }
+function seGold()       { [523.25,659.25,783.99,1046.50].forEach((f,i)=>beep(f,0.18,0.10,'triangle',i*0.07)); }
+function seChest()      { [440,554.37,659.25].forEach((f,i)=>beep(f,0.22,0.08,'triangle',i*0.10)); }
+function seHit()        { beep(180,0.12,0.07,'sine'); }
+function seVictory()    { [523.25,659.25,783.99,1046.50,1318.51].forEach((f,i)=>beep(f,0.25,0.12,'triangle',i*0.06)); }
+function seMagic()      { beep(880,0.1,0.08,'triangle'); beep(1108.73,0.15,0.08,'triangle',0.05); beep(1318.51,0.2,0.08,'triangle',0.1); }
+function sePotBreak() {
+  const a=getAudio(), sr=a.sampleRate;
+  const buf=a.createBuffer(1,Math.ceil(sr*0.28),sr);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.2)*0.5;
+  const src=a.createBufferSource(); src.buffer=buf;
+  const flt=a.createBiquadFilter(); flt.type='bandpass'; flt.frequency.value=700; flt.Q.value=0.8;
+  const g=a.createGain(); g.gain.value=0.45;
+  src.connect(flt); flt.connect(g); g.connect(a.destination);
+  src.start(); src.stop(a.currentTime+0.28);
+}
+
+// BGM look-ahead scheduler
+let bgmMode=null, bgmTimer=null, bgmStep=0, bgmNextBeat=0;
+const FIELD_SONG=[
+  // フレーズ1：上昇して頂点 A5 から戻る
+  [523.25,0.3],[0,0.15],[659.25,0.3],[784,0.3],
+  [880,0.45],[784,0.3],[659.25,0.3],[523.25,0.45],
+  // フレーズ2：別のスケールで同じ輪郭
+  [523.25,0.3],[0,0.15],[587.33,0.3],[698.46,0.3],
+  [783.99,0.45],[698.46,0.3],[587.33,0.3],[523.25,0.75],
+  // フレーズ3：G4 から始まる新展開、開放感
+  [392,0.3],[0,0.15],[523.25,0.3],[659.25,0.3],
+  [784,0.45],[659.25,0.3],[523.25,0.3],[440,0.45],
+  // フレーズ4：A4 を軸にした締め、C5 で着地
+  [523.25,0.3],[0,0.15],[440,0.3],[523.25,0.3],
+  [659.25,0.45],[523.25,0.3],[440,0.3],[523.25,0.9],
+];
+const BATTLE_SONG=[
+  [220,0.1],[0,0.05],[220,0.1],[0,0.05],[293.66,0.15],[220,0.1],[0,0.1],
+  [164.81,0.1],[0,0.05],[196,0.1],[0,0.05],[220,0.2],[0,0.1],
+  [220,0.1],[0,0.05],[220,0.1],[0,0.05],[261.63,0.15],[220,0.1],[0,0.1],
+  [174.61,0.2],[0,0.1],[196,0.2],[0,0.2],
+];
+function bgmSchedule() {
+  if (!bgmMode) return;
+  const a=getAudio(), now=a.currentTime;
+  const song=bgmMode==='field'?FIELD_SONG:BATTLE_SONG;
+  while (bgmNextBeat < now+0.3) {
+    const [freq,dur]=song[bgmStep%song.length];
+    if (freq>0) {
+      const o=a.createOscillator(), g=a.createGain();
+      const t=bgmNextBeat;
+      o.type=bgmMode==='field'?'triangle':'square'; o.frequency.value=freq;
+      o.connect(g); g.connect(a.destination);
+      const v=bgmMode==='field'?0.038:0.022;
+      g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(v,t+0.015);
+      g.gain.setValueAtTime(v,t+dur*0.72); g.gain.linearRampToValueAtTime(0,t+dur);
+      o.start(t); o.stop(t+dur+0.01);
+      if (bgmMode==='field' && bgmStep%4===0) {
+        const ob=a.createOscillator(), gb=a.createGain();
+        ob.type='sine'; ob.frequency.value=freq/2;
+        ob.connect(gb); gb.connect(a.destination);
+        gb.gain.setValueAtTime(0.016,t); gb.gain.setValueAtTime(0.016,t+dur*1.9);
+        gb.gain.linearRampToValueAtTime(0,t+dur*2);
+        ob.start(t); ob.stop(t+dur*2+0.01);
+      }
+      if (bgmMode==='battle' && bgmStep%8===0) {
+        const br=a.sampleRate, bb=a.createBuffer(1,Math.ceil(br*0.09),br);
+        const bd=bb.getChannelData(0);
+        for(let i=0;i<bd.length;i++) bd[i]=(Math.random()*2-1)*Math.pow(1-i/bd.length,1.5);
+        const bs=a.createBufferSource(); bs.buffer=bb;
+        const bf=a.createBiquadFilter(); bf.type='lowpass'; bf.frequency.value=180;
+        const bg=a.createGain(); bg.gain.value=0.10;
+        bs.connect(bf); bf.connect(bg); bg.connect(a.destination);
+        bs.start(t); bs.stop(t+0.09);
+      }
+    }
+    bgmNextBeat+=dur; bgmStep++;
+  }
+  bgmTimer=setTimeout(bgmSchedule,80);
+}
+function startBgm(mode) {
+  if (bgmMode===mode) return;
+  stopBgm(); bgmMode=mode;
+  const a=getAudio(); bgmNextBeat=a.currentTime+0.1; bgmStep=0;
+  bgmSchedule();
+}
+function stopBgm() {
+  if (bgmTimer) { clearTimeout(bgmTimer); bgmTimer=null; }
+  bgmMode=null;
+}
+
+// ─── Screen Shake ─────────────────────────────────────────────────────────────
+let shakeAmt = 0;
+function shake(amt) { shakeAmt = Math.max(shakeAmt, amt); }
+function updateShake() { shakeAmt *= 0.78; if (shakeAmt < 0.4) shakeAmt = 0; }
+function shakeOffset() {
+  if (!shakeAmt) return [0, 0];
+  return [(Math.random()-0.5)*shakeAmt*2, (Math.random()-0.5)*shakeAmt*2];
+}
+
+// ─── Particles ────────────────────────────────────────────────────────────────
+const particles=[];
+function addParticles(wx, wy, cols, count=18) {
+  for (let i=0;i<count;i++) {
+    const angle=Math.random()*Math.PI*2, speed=0.6+Math.random()*2.8;
+    particles.push({
+      wx:wx+(Math.random()-0.5)*6, wy:wy+(Math.random()-0.5)*6,
+      vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed-1.8,
+      life:1, decay:0.022+Math.random()*0.022,
+      size:2+Math.floor(Math.random()*4),
+      col:cols[Math.floor(Math.random()*cols.length)]
+    });
+  }
+}
+const POT_COLS =['#8b5e3c','#6b3a20','#c8a400','#f0e0a0','#cc8844'];
+const GOLD_COLS=['#ffd700','#ffec60','#ff9900','#ffe000'];
+function updateParticles() {
+  for (let i=particles.length-1;i>=0;i--) {
+    const p=particles[i];
+    p.wx+=p.vx; p.wy+=p.vy; p.vy+=0.10;
+    p.life-=p.decay;
+    if (p.life<=0) particles.splice(i,1);
+  }
+}
+function drawParticles() {
+  particles.forEach(p=>{
+    ctx.globalAlpha=Math.max(0,p.life);
+    ctx.fillStyle=p.col;
+    ctx.fillRect(Math.round(p.wx-camX-p.size/2),Math.round(p.wy-camY-p.size/2),p.size,p.size);
+  });
+  ctx.globalAlpha=1;
+}
+
+// ─── Player & Clona ───────────────────────────────────────────────────────────
+const player = { tx:9, ty:20, dx:9*TS, dy:20*TS, dir:1, anim:0 };
+const clona  = { tx:9, ty:21, dx:9*TS, dy:21*TS, dir:0, anim:0 };
+let camX = 0, camY = 288;
+const LERP = 0.14;
+let moveCooldown = 0;
+const MOVE_CD = 10;
+
+function smoothStep(e) {
+  const sx = e.tx*TS - e.dx, sy = e.ty*TS - e.dy;
+  e.dx += sx * LERP;  e.dy += sy * LERP;
+  if (Math.abs(sx) < 0.4) e.dx = e.tx*TS;
+  if (Math.abs(sy) < 0.4) e.dy = e.ty*TS;
+}
+function isAtTarget(e) { return e.dx === e.tx*TS && e.dy === e.ty*TS; }
+function tryMove(ddx, ddy) {
+  if (!isAtTarget(player)) return false;
+  const nx = player.tx+ddx, ny = player.ty+ddy;
+  if (nx<0||nx>=MCOLS||ny<0||ny>=MROWS) return false;
+  if (!WALKABLE.has(MAP[ny][nx])) return false;
+  clona.tx = player.tx; clona.ty = player.ty; clona.dir = player.dir;
+  clona.anim = player.anim + 2; // 少しずらしてリズムを変える
+  player.tx = nx; player.ty = ny;
+  player.dir = ddx<0?2:ddx>0?3:ddy<0?0:1;
+  player.anim++;
+  return true;
+}
+function updateCamera() {
+  camX = Math.max(0, Math.min(player.dx - CW/2 + TS/2, MCOLS*TS - CW));
+  camY = Math.max(0, Math.min(player.dy - CH/2 + TS/2, MROWS*TS - CH));
+}
+function handleMovement() {
+  if (gameState !== 'walking') return;
+  if (!isAtTarget(player)) return;
+  if (moveCooldown > 0) { moveCooldown--; return; }
+  let moved = false;
+  if      (keys['ArrowUp']   ||keys['KeyW']) moved = tryMove(0,-1);
+  else if (keys['ArrowDown'] ||keys['KeyS']) moved = tryMove(0, 1);
+  else if (keys['ArrowLeft'] ||keys['KeyA']) moved = tryMove(-1,0);
+  else if (keys['ArrowRight']||keys['KeyD']) moved = tryMove(1, 0);
+  if (moved) moveCooldown = MOVE_CD;
+}
+
+// ─── Interaction ──────────────────────────────────────────────────────────────
+function checkInteract() {
+  if (!isAtTarget(player)) return;
+  // NPC（向いている方向のNPCのみ反応）
+  const foff = [[0,-1],[0,1],[-1,0],[1,0]][player.dir];
+  for (const npc of NPCS) {
+    if (player.tx+foff[0]===npc.tx && player.ty+foff[1]===npc.ty) {
+      const lines = npc.getLines ? npc.getLines() : npc.lines;
+      runScript(lines); return;
+    }
+  }
+  // Facing tile
+  const off = [[0,-1],[0,1],[-1,0],[1,0]][player.dir];
+  const ftx = player.tx+off[0], fty = player.ty+off[1];
+  if (ftx<0||ftx>=MCOLS||fty<0||fty>=MROWS) return;
+  const tile = MAP[fty][ftx];
+  if (tile === T.CHEST) {
+    MAP[fty][ftx] = T.PATH; gold += 50;
+    addParticles(ftx*TS+TS/2, fty*TS+TS/2, GOLD_COLS, 14);
+    seChest(); setTimeout(()=>seGold(), 300);
+    runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'宝箱から 50G をいただいた！'},
+      {speaker:'CLANA', col:'#9966ff', text:'……これ、誰かのお宝ですよね？'},
+    ], checkBossTrigger);
+  } else if (tile === T.POT) {
+    MAP[fty][ftx] = T.PATH; gold += 20;
+    addParticles(ftx*TS+TS/2, fty*TS+TS/2, POT_COLS, 22);
+    sePotBreak(); setTimeout(()=>seGold(), 280);
+    runScript([
+      {speaker:'EDENY', col:'#ff8c40', text:'ツボを割ったら 20G 出てきた。ラッキー。'},
+      {speaker:'CLANA', col:'#9966ff', text:'弁償してあげてください……。'},
+    ], checkBossTrigger);
+  } else if (tile === T.SIGN) {
+    runScript([
+      {speaker:'', col:'#00d4aa', text:'「EDEN PARK 建設予定地」'},
+      {speaker:'CLANA', col:'#9966ff', text:'第一歩ですね。'},
+      {speaker:'EDENY', col:'#ff8c40', text:'まだ全然足りんけどな。'},
+      {speaker:'CLANA', col:'#9966ff', text:'……気が遠くなりますね。'},
+    ], () => { gameState = 'complete'; });
+  }
+}
+
+function checkBossTrigger() {
+  if (bossTriggered || bossDefeated) return;
+  bossTriggered = true;
+  runScript([
+    {speaker:'CLANA', col:'#9966ff', text:'エデニー！！村の入り口の方から何か来ます！！'},
+    {speaker:'EDENY', col:'#ff8c40', text:'なんや……めんどくさいな。報酬は出るんか？'},
+    {speaker:'CLANA', col:'#9966ff', text:'……村を救った英雄になれます。'},
+    {speaker:'EDENY', col:'#ff8c40', text:'いらん。'},
+    {speaker:'CLANA', col:'#9966ff', text:'お金も出ます。'},
+    {speaker:'EDENY', col:'#ff8c40', text:'やったる。'},
+  ], startBattle);
+}
+
+// ─── Battle ───────────────────────────────────────────────────────────────────
+const bt = {
+  enemyMaxHp:40, enemyHp:40, playerMaxHp:30, playerHp:30,
+  phase:'player_select', cursor:0, timer:0,
+  log:'コマンドを選んでください',
+  flashEnemy:0, flashPlayer:0,
+  victoryLines:[
+    {speaker:'EDENY', col:'#ff8c40', text:'倒した。200G もらった。まあまあや。'},
+    {speaker:'CLANA', col:'#9966ff', text:'村を救った英雄の一言目がそれですか……'},
+    {speaker:'EDENY', col:'#ff8c40', text:'行くで。のっぱらに戻ろ。'},
+    {speaker:'CLANA', col:'#9966ff', text:'……「のっぱら」に何か立ってますよ。'},
+  ],
+  victoryIdx:0, victoryProg:0,
+};
+
+function startBattle() {
+  bt.enemyHp = bt.enemyMaxHp; bt.playerHp = bt.playerMaxHp;
+  bt.phase = 'player_select'; bt.cursor = 0; bt.timer = 0;
+  bt.log = 'コマンドを選んでください';
+  bt.flashEnemy = 0; bt.flashPlayer = 0;
+  bt.victoryIdx = 0; bt.victoryProg = 0;
+  startBgm('battle');
+  gameState = 'battle';
+}
+
+function updateBattle() {
+  if (bt.flashEnemy  > 0) bt.flashEnemy  -= 0.05;
+  if (bt.flashPlayer > 0) bt.flashPlayer -= 0.05;
+
+  if (bt.phase === 'victory_dialog') {
+    if (bt.victoryIdx >= bt.victoryLines.length) return; // endBattle待ちフェード中
+    bt.victoryProg = Math.min(bt.victoryProg + 1.6, bt.victoryLines[bt.victoryIdx].text.length);
+    const confirm = justPressed['Space']||justPressed['Enter']||justPressed['KeyZ'];
+    if (confirm) {
+      if (bt.victoryProg < bt.victoryLines[bt.victoryIdx].text.length) {
+        bt.victoryProg = bt.victoryLines[bt.victoryIdx].text.length;
+      } else {
+        bt.victoryIdx++; bt.victoryProg = 0;
+        if (bt.victoryIdx >= bt.victoryLines.length) endBattle();
+      }
+    }
+    return;
+  }
+
+  if (bt.phase === 'player_select') {
+    if (justPressed['ArrowLeft'] ||justPressed['KeyA']) bt.cursor = 0;
+    if (justPressed['ArrowRight']||justPressed['KeyD']) bt.cursor = 1;
+    const confirm = justPressed['Space']||justPressed['Enter']||justPressed['KeyZ'];
+    if (confirm) {
+      if (bt.cursor === 0) {
+        const dmg = 8 + Math.floor(Math.random()*8);
+        bt.enemyHp = Math.max(0, bt.enemyHp - dmg);
+        bt.flashEnemy = 1.0;
+        bt.log = `エデニーの攻撃！ ${dmg} ダメージ！`;
+        seHit(); shake(4);
+      } else {
+        const dmg = 15 + Math.floor(Math.random()*11);
+        bt.enemyHp = Math.max(0, bt.enemyHp - dmg);
+        bt.flashEnemy = 1.0;
+        bt.log = `クラナの魔法！ ✨ ${dmg} ダメージ！`;
+        seMagic(); shake(6);
+      }
+      bt.phase = 'player_attack'; bt.timer = 50;
+    }
+  }
+
+  if (bt.phase === 'player_attack') {
+    bt.timer--;
+    if (bt.timer <= 0) {
+      if (bt.enemyHp <= 0) { seVictory(); shake(14); bt.phase = 'victory_dialog'; return; }
+      const dmg = 7 + Math.floor(Math.random()*8);
+      const prev = bt.playerHp;
+      bt.playerHp = Math.max(1, bt.playerHp - dmg);
+      bt.flashPlayer = 1.0;
+      bt.log = `謎の影の攻撃！ ${dmg} ダメージ！` + (prev - dmg <= 0 ? ' （なんとか生き残った！）' : '');
+      seHit(); shake(8);
+      bt.phase = 'enemy_attack'; bt.timer = 55;
+    }
+  }
+
+  if (bt.phase === 'enemy_attack') {
+    bt.timer--;
+    if (bt.timer <= 0) { bt.phase = 'player_select'; bt.log = 'コマンドを選んでください'; }
+  }
+}
+
+function endBattle() {
+  bossDefeated = true; gold += 200;
+  MAP[19][11] = T.SIGN; // 看板出現！
+  fadeOut(() => {
+    player.tx=9; player.ty=16; player.dx=9*TS; player.dy=16*TS;
+    clona.tx=9;  clona.ty=17;  clona.dx=9*TS;  clona.dy=17*TS;
+    updateCamera();
+    startBgm('field');
+    gameState = 'walking';
+  });
+}
+
+// ─── New Game Reset ───────────────────────────────────────────────────────────
+function resetGame() {
+  gold = 0; bossTriggered = false; bossDefeated = false;
+  // マップアイテム復元
+  MAP[2][6]  = T.POT;
+  MAP[2][17] = T.CHEST;
+  MAP[19][11] = T.GRASS; // 看板を消す
+  // プレイヤー位置リセット
+  player.tx=9; player.ty=20; player.dx=9*TS; player.dy=20*TS; player.dir=1; player.anim=0;
+  clona.tx=9;  clona.ty=21;  clona.dx=9*TS;  clona.dy=21*TS;  clona.dir=0;  clona.anim=0;
+  updateCamera();
+  // バトル状態リセット
+  bt.enemyHp=bt.enemyMaxHp; bt.playerHp=bt.playerMaxHp;
+  bt.phase='player_select'; bt.victoryIdx=0; bt.victoryProg=0;
+  // スクリプト・演出リセット
+  script=null; scriptIdx=0; scriptProg=0;
+  particles.length=0; shakeAmt=0;
+  fadeAlpha=0; fadeDir=0; fadeCb=null;
+  stopBgm();
+  gameState='title';
+}
+
+// ─── Tile drawing ─────────────────────────────────────────────────────────────
+function drawTile(id, px, py) {
+  switch(id) {
+    case T.GRASS:
+      ctx.fillStyle='#2d5a1b'; ctx.fillRect(px,py,TS,TS);
+      ctx.fillStyle='#366b22';
+      ctx.fillRect(px+4,py+20,2,6); ctx.fillRect(px+11,py+22,2,4);
+      ctx.fillRect(px+20,py+18,2,7); ctx.fillRect(px+27,py+23,2,4);
+      break;
+    case T.TREE:
+      ctx.fillStyle='#1a3a0d'; ctx.fillRect(px,py,TS,TS);
+      ctx.fillStyle='#5c3d2e'; ctx.fillRect(px+12,py+20,8,12);
+      ctx.fillStyle='#2a5e14'; ctx.beginPath(); ctx.arc(px+16,py+14,13,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#3a7a1e'; ctx.beginPath(); ctx.arc(px+16,py+11,10,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#4a9a2e'; ctx.beginPath(); ctx.arc(px+16,py+8, 7, 0,Math.PI*2); ctx.fill();
+      break;
+    case T.PATH:
+      ctx.fillStyle='#9a7820'; ctx.fillRect(px,py,TS,TS);
+      ctx.fillStyle='#7a5a10';
+      ctx.fillRect(px+4,py+8,3,3); ctx.fillRect(px+15,py+21,4,3);
+      ctx.fillRect(px+24,py+12,3,4); ctx.fillRect(px+9,py+27,3,3);
+      break;
+    case T.WALL:
+      ctx.fillStyle='#7a5040'; ctx.fillRect(px,py,TS,6);
+      ctx.fillStyle='#5c3d2e'; ctx.fillRect(px,py+6,TS,TS-6);
+      ctx.fillStyle='#4a2f22';
+      ctx.fillRect(px,py+14,TS,2); ctx.fillRect(px,py+22,TS,2);
+      ctx.fillRect(px+16,py+6,2,8); ctx.fillRect(px+8,py+16,2,8); ctx.fillRect(px+20,py+24,2,8);
+      break;
+    case T.DOOR:
+      ctx.fillStyle='#3d2b1f'; ctx.fillRect(px,py,TS,TS);
+      ctx.fillStyle='#2a1a10'; ctx.fillRect(px+7,py+4,18,28);
+      ctx.fillStyle='#6b4030'; ctx.fillRect(px+9,py+6,14,24);
+      ctx.fillStyle='#c8a400'; ctx.beginPath(); ctx.arc(px+20,py+20,2.5,0,Math.PI*2); ctx.fill();
+      break;
+    case T.CHEST: {
+      ctx.fillStyle='#9a7820'; ctx.fillRect(px,py,TS,TS); // パス色に合わせる
+      // 蓋（アーチ形）
+      ctx.fillStyle='#7a4418';
+      ctx.beginPath(); ctx.arc(px+16,py+18,12,Math.PI,0,false); ctx.fill();
+      // 胴体
+      ctx.fillStyle='#7a4418'; ctx.fillRect(px+4,py+18,24,11);
+      // 蓋ライン（境界）
+      ctx.fillStyle='#4a2808'; ctx.fillRect(px+4,py+17,24,2);
+      // 金バンド
+      ctx.fillStyle='#ffcc00'; ctx.fillRect(px+4,py+19,24,3);
+      // 留め具
+      ctx.fillStyle='#ffcc00'; ctx.fillRect(px+13,py+22,6,5);
+      ctx.fillStyle='#aa8800'; ctx.beginPath(); ctx.arc(px+16,py+24,1.5,0,Math.PI*2); ctx.fill();
+      // 蓋ハイライト
+      ctx.fillStyle='rgba(255,220,120,0.45)';
+      ctx.beginPath(); ctx.arc(px+11,py+15,4,Math.PI,0,false); ctx.fill();
+      // 蓋の木目
+      ctx.strokeStyle='#5a3210'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(px+10,py+18); ctx.arc(px+16,py+18,6,Math.PI,0,false); ctx.stroke();
+      break;
+    }
+    case T.POT: {
+      ctx.fillStyle='#9a7820'; ctx.fillRect(px,py,TS,TS); // パス色に合わせる
+      // 影
+      ctx.fillStyle='rgba(0,0,0,0.22)';
+      ctx.beginPath(); ctx.ellipse(px+16,py+30,8,3,0,0,Math.PI*2); ctx.fill();
+      // 胴体
+      ctx.fillStyle='#cc6c28';
+      ctx.beginPath(); ctx.ellipse(px+16,py+21,11,11,0,0,Math.PI*2); ctx.fill();
+      // 右側シェーディング
+      ctx.fillStyle='rgba(80,20,0,0.35)';
+      ctx.beginPath(); ctx.ellipse(px+21,py+23,5,7,0.3,0,Math.PI*2); ctx.fill();
+      // 首
+      ctx.fillStyle='#cc6c28'; ctx.fillRect(px+12,py+10,8,4);
+      // 口縁
+      ctx.fillStyle='#e08038'; ctx.fillRect(px+9,py+8,14,3);
+      ctx.fillStyle='#cc6c28'; ctx.fillRect(px+10,py+7,12,2);
+      // ひびライン（壊せる予告）
+      ctx.strokeStyle='rgba(60,15,0,0.7)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(px+17,py+13); ctx.lineTo(px+21,py+23); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px+14,py+15); ctx.lineTo(px+11,py+24); ctx.stroke();
+      // ハイライト
+      ctx.fillStyle='rgba(255,200,140,0.4)';
+      ctx.beginPath(); ctx.ellipse(px+11,py+18,3,4,0,0,Math.PI*2); ctx.fill();
+      break;
+    }
+    case T.SIGN:
+      ctx.fillStyle='#2d5a1b'; ctx.fillRect(px,py,TS,TS);
+      ctx.fillStyle='#6b4226'; ctx.fillRect(px+14,py+8,4,20); // 柱
+      ctx.fillStyle='#8b5e3c'; ctx.fillRect(px+4,py+8,24,14);  // 板
+      ctx.fillStyle='#c8a400'; ctx.fillRect(px+6,py+10,20,10); // 看板面
+      ctx.fillStyle='#5c3d2e';
+      ctx.fillRect(px+7,py+12,3,2); ctx.fillRect(px+11,py+12,3,2); // 文字っぽい線
+      ctx.fillRect(px+15,py+12,3,2); ctx.fillRect(px+19,py+12,3,2);
+      ctx.fillRect(px+7,py+15,8,2);
+      break;
+    case T.FLOWER:
+      ctx.fillStyle='#2d5a1b'; ctx.fillRect(px,py,TS,TS);
+      ctx.fillStyle='#366b22'; ctx.fillRect(px+4,py+20,2,6); ctx.fillRect(px+20,py+18,2,7);
+      ctx.fillStyle='#ffdd44'; ctx.beginPath(); ctx.arc(px+8,py+22,3,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#ff88aa'; ctx.beginPath(); ctx.arc(px+22,py+16,3,0,Math.PI*2); ctx.fill();
+      break;
+    default:
+      ctx.fillStyle='#333'; ctx.fillRect(px,py,TS,TS);
+  }
+}
+function drawMap() {
+  const c0=Math.max(0,Math.floor(camX/TS)), c1=Math.min(MCOLS,Math.ceil((camX+CW)/TS)+1);
+  const r0=Math.max(0,Math.floor(camY/TS)), r1=Math.min(MROWS,Math.ceil((camY+CH)/TS)+1);
+  for (let r=r0;r<r1;r++) for (let c=c0;c<c1;c++) drawTile(MAP[r][c],c*TS-camX,r*TS-camY);
+}
+
+// ─── Character drawing ────────────────────────────────────────────────────────
+function drawChar(px, py, dir, hairCol, bodyCol, anim=0) {
+  const x=Math.round(px), y=Math.round(py);
+  const ls = Math.round(Math.sin(anim * 0.8) * 2.5); // 足の振れ幅
+  ctx.fillStyle='rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(x+12,y+30,9,4,0,0,Math.PI*2); ctx.fill();
+  // 足（前後交互に）
+  ctx.fillStyle='#3a2a1a';
+  if (dir===0||dir===1) {
+    ctx.fillRect(x+5, y+22+ls, 5, 8);   // 左足
+    ctx.fillRect(x+13,y+22-ls, 5, 8);   // 右足（逆位相）
+  } else { ctx.fillRect(x+5,y+22,14,8); }
+  // 体
+  ctx.fillStyle=bodyCol; ctx.fillRect(x+4,y+14,16,10);
+  // 腕（足と逆位相でスイング）
+  if (dir===0||dir===1) {
+    ctx.fillRect(x+0, y+15+ls, 4, 7);   // 左腕
+    ctx.fillRect(x+20,y+15-ls, 4, 7);   // 右腕
+  }
+  ctx.fillStyle='#f0c080'; ctx.beginPath(); ctx.arc(x+12,y+9,8,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=hairCol;
+  if      (dir===1) { ctx.fillRect(x+4,y+1,16,7); ctx.fillRect(x+2,y+6,4,6); ctx.fillRect(x+18,y+6,4,6); }
+  else if (dir===0) { ctx.fillRect(x+4,y+1,16,10); ctx.fillRect(x+3,y+6,3,7); ctx.fillRect(x+18,y+6,3,7); }
+  else if (dir===2) { ctx.fillRect(x+4,y+1,15,7); ctx.fillRect(x+15,y+5,5,7); }
+  else              { ctx.fillRect(x+5,y+1,15,7); ctx.fillRect(x+4,y+5,5,7); }
+  ctx.fillStyle='#2a1a0a';
+  if (dir===1) { ctx.fillRect(x+7,y+9,3,3); ctx.fillRect(x+14,y+9,3,3); }
+  else if (dir===2) ctx.fillRect(x+5,y+9,3,3);
+  else if (dir===3) ctx.fillRect(x+16,y+9,3,3);
+}
+
+// ─── Boss drawing ─────────────────────────────────────────────────────────────
+function drawBoss(flashAlpha) {
+  const bx=CW/2, by=155, pulse=Math.sin(Date.now()*0.003)*0.04+1;
+  ctx.save(); ctx.translate(bx,by); ctx.scale(pulse,pulse);
+  ctx.shadowColor='#5500aa'; ctx.shadowBlur=40;
+  ctx.fillStyle='#150025'; ctx.beginPath(); ctx.ellipse(0,0,62,58,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#2a0050'; ctx.beginPath(); ctx.ellipse(0,-6,46,44,0,0,Math.PI*2); ctx.fill();
+  // tendrils
+  ctx.strokeStyle='#1a0033'; ctx.lineWidth=10;
+  for (let i=-2;i<=2;i++) {
+    ctx.beginPath(); ctx.moveTo(i*20,42);
+    ctx.quadraticCurveTo(i*22+Math.sin(Date.now()*0.004+i)*8,62, i*18+Math.sin(Date.now()*0.003+i)*10,78);
+    ctx.stroke();
+  }
+  // eyes
+  const ep = Math.sin(Date.now()*0.005)*0.15+1;
+  ctx.shadowColor='#ff3300'; ctx.shadowBlur=25;
+  ctx.fillStyle='#ff4400';
+  ctx.beginPath(); ctx.ellipse(-19,-8,9*ep,7*ep,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 19,-8,9*ep,7*ep,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ffaa00';
+  ctx.beginPath(); ctx.ellipse(-19,-8,4,3,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 19,-8,4,3,0,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0; ctx.restore();
+  if (flashAlpha > 0) {
+    ctx.globalAlpha = Math.max(0, flashAlpha) * 0.75;
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath(); ctx.ellipse(bx,by,68,65,0,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+}
+
+// ─── HP bar ───────────────────────────────────────────────────────────────────
+function drawHpBar(x, y, w, h, cur, max, label) {
+  const r = cur/max;
+  const col = r>0.5?'#44dd44':r>0.25?'#dddd44':'#dd4444';
+  ctx.fillStyle='#222'; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle=col; ctx.fillRect(x,y,Math.round(w*r),h);
+  ctx.strokeStyle='#555'; ctx.lineWidth=1; ctx.strokeRect(x,y,w,h);
+  ctx.fillStyle='#ccc'; ctx.font='11px "Courier New"';
+  ctx.textAlign='left'; ctx.fillText(`${label}  ${cur}/${max}`, x, y-4);
+}
+
+// ─── Dialog box ───────────────────────────────────────────────────────────────
+function drawDlgBox(line, prog) {
+  const bx=20, by=CH-138, bw=CW-40, bh=118;
+  ctx.fillStyle='rgba(5,10,20,0.93)'; ctx.fillRect(bx,by,bw,bh);
+  ctx.strokeStyle='#00d4aa'; ctx.lineWidth=2; ctx.strokeRect(bx,by,bw,bh);
+  if (line.speaker) {
+    ctx.fillStyle=line.col||'#00d4aa'; ctx.fillRect(bx,by-30,190,30);
+    ctx.fillStyle='#fff'; ctx.font='bold 14px "Courier New"';
+    ctx.textAlign='left'; ctx.fillText(line.speaker, bx+12, by-10);
+  }
+  const shown = line.text.slice(0, Math.floor(prog));
+  ctx.fillStyle='#e0e8f0'; ctx.font='14px "Noto Sans JP","Courier New",sans-serif';
+  const maxW = bw-36;
+  let lines=[], cur='';
+  for (const ch of shown) {
+    if (ctx.measureText(cur+ch).width > maxW) { lines.push(cur); cur=ch; } else cur+=ch;
+  }
+  if (cur) lines.push(cur);
+  lines.forEach((l,i) => ctx.fillText(l, bx+14, by+28+i*28));
+  if (Math.floor(prog)>=line.text.length && Math.floor(Date.now()/450)%2===0) {
+    ctx.fillStyle='#00d4aa'; ctx.font='16px monospace'; ctx.fillText('▼',bx+bw-28,by+bh-10);
+  }
+}
+
+// ─── Title screen ─────────────────────────────────────────────────────────────
+function drawTitle() {
+  const now = Date.now(), t = now * 0.001;
+
+  // ── 空グラデーション ──
+  const sky = ctx.createLinearGradient(0,0,0,CH);
+  sky.addColorStop(0,  '#020510');
+  sky.addColorStop(0.5,'#0d0828');
+  sky.addColorStop(0.8,'#1e0a40');
+  sky.addColorStop(1,  '#2e0e1a');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,CW,CH);
+
+  // ── ユートピア都市シルエット（山の前に描いて山から塔が顔を出す） ──
+  {
+    const p = Math.sin(t*0.9)*0.12+0.88;
+    const baseY = 368;
+    ctx.save();
+    ctx.shadowColor='#00d4aa'; ctx.shadowBlur=6;
+
+    // 塔を描くヘルパー
+    const tower=(cx,topY,w,style)=>{
+      ctx.strokeStyle=`rgba(0,185,148,${0.32*p})`; ctx.lineWidth=1;
+      ctx.fillStyle=`rgba(0,185,148,${0.05*p})`;
+      ctx.strokeRect(cx-w/2,topY,w,baseY-topY);
+      ctx.fillRect(cx-w/2,topY,w,baseY-topY);
+      // 窓
+      const floors=Math.floor((baseY-topY)/22);
+      for(let f=1;f<floors;f++){
+        ctx.fillStyle=`rgba(0,212,170,${0.2*p})`;
+        ctx.fillRect(cx-2,topY+f*22-5,5,4);
+      }
+      // 頂部
+      ctx.strokeStyle=`rgba(0,195,155,${0.42*p})`;
+      if(style==='spire'){
+        ctx.beginPath(); ctx.moveTo(cx-w/2,topY); ctx.lineTo(cx,topY-38); ctx.lineTo(cx+w/2,topY); ctx.stroke();
+        ctx.fillStyle=`rgba(0,212,170,${0.7*p})`; ctx.beginPath(); ctx.arc(cx,topY-38,2.5,0,Math.PI*2); ctx.fill();
+      } else if(style==='dome'){
+        ctx.beginPath(); ctx.arc(cx,topY,w/2,Math.PI,0,false); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx,topY-w/2); ctx.lineTo(cx,topY-w/2-14); ctx.stroke();
+      } else if(style==='multi'){
+        [[-w*0.38,26],[0,32],[w*0.38,26]].forEach(([dx,h])=>{
+          ctx.beginPath(); ctx.moveTo(cx+dx-4,topY); ctx.lineTo(cx+dx,topY-h); ctx.lineTo(cx+dx+4,topY); ctx.stroke();
+        });
+      }
+    };
+
+    // 橋を描くヘルパー
+    const bridge=(x1,x2,y,sag=6)=>{
+      ctx.strokeStyle=`rgba(0,175,138,${0.28*p})`; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x1,y); ctx.quadraticCurveTo((x1+x2)/2,y+sag,x2,y); ctx.stroke();
+    };
+
+    // ── 塔 ──
+    tower(82,  290, 18,'flat');
+    tower(148, 245, 22,'dome');
+    tower(208, 178, 18,'spire');
+    tower(262, 212, 20,'multi');
+    // 中央パレス
+    ctx.strokeStyle=`rgba(0,195,155,${0.38*p})`; ctx.lineWidth=1;
+    ctx.fillStyle=`rgba(0,185,148,${0.06*p})`;
+    ctx.strokeRect(286,252,68,116); ctx.fillRect(286,252,68,116);
+    ctx.beginPath(); ctx.arc(320,252,34,Math.PI,0,false); ctx.stroke();
+    ctx.fillStyle=`rgba(0,185,148,${0.08*p})`; ctx.beginPath(); ctx.arc(320,252,34,Math.PI,0,false); ctx.fill();
+    ctx.beginPath(); ctx.arc(320,252,18,Math.PI,0,false); ctx.stroke(); // 内ドーム
+    ctx.beginPath(); ctx.moveTo(308,218); ctx.lineTo(320,162); ctx.lineTo(332,218); ctx.stroke(); // スパイア
+    ctx.fillStyle=`rgba(0,212,170,${0.85*p})`; ctx.beginPath(); ctx.arc(320,162,4,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(200,255,245,${0.6*p})`; ctx.beginPath(); ctx.arc(320,162,2,0,Math.PI*2); ctx.fill();
+    // パレスのサイド小塔
+    [[286,242],[354,242]].forEach(([bx,ty])=>{
+      ctx.strokeStyle=`rgba(0,195,155,${0.38*p})`;
+      ctx.beginPath(); ctx.moveTo(bx-7,ty); ctx.lineTo(bx,ty-22); ctx.lineTo(bx+7,ty); ctx.stroke();
+    });
+    tower(378, 212, 20,'multi');
+    tower(432, 178, 18,'spire');
+    tower(492, 245, 22,'dome');
+    tower(558, 290, 18,'flat');
+
+    // ── 基底城壁 ──
+    ctx.strokeStyle=`rgba(0,175,138,${0.28*p})`; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(42,baseY-20); ctx.lineTo(598,baseY-20); ctx.stroke();
+    for(let x=46;x<594;x+=13){
+      ctx.beginPath(); ctx.moveTo(x,baseY-20); ctx.lineTo(x,baseY-30); ctx.lineTo(x+8,baseY-30); ctx.lineTo(x+8,baseY-20); ctx.stroke();
+    }
+
+    // ── 橋 ──
+    bridge(208,262, 194,5);  bridge(378,432, 194,5);
+    bridge(286,262, 222,4);  bridge(354,378, 222,4);
+    bridge(148,208, 258,6);  bridge(432,492, 258,6);
+    bridge(82, 148, 296,7);  bridge(492,558, 296,7);
+
+    // ── 浮遊アーチ（上空） ──
+    ctx.strokeStyle=`rgba(0,175,138,${0.2*p})`; ctx.lineWidth=1;
+    [[155,62,148],[320,78,132],[478,62,148]].forEach(([cx2,r2,y2])=>{
+      ctx.beginPath(); ctx.arc(cx2,y2,r2,Math.PI,0,false); ctx.stroke();
+      ctx.setLineDash([2,5]);
+      ctx.beginPath(); ctx.moveTo(cx2-r2,y2); ctx.lineTo(cx2-r2,y2+22); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx2+r2,y2); ctx.lineTo(cx2+r2,y2+22); ctx.stroke();
+      ctx.setLineDash([]);
+      // アーチ頂部の輝き
+      ctx.fillStyle=`rgba(0,212,170,${0.45*p})`; ctx.beginPath(); ctx.arc(cx2,y2-r2,2.5,0,Math.PI*2); ctx.fill();
+    });
+
+    ctx.restore();
+  }
+
+  // ── 遠方の山（2層）──
+  const mts1 = [0,55,110,165,220,275,330,390,450,500,560,610,640];
+  const mh1  = [CH,295,270,310,260,285,255,280,265,295,275,305,CH];
+  ctx.fillStyle='#08041a';
+  ctx.beginPath(); ctx.moveTo(0,CH);
+  mts1.forEach((x,i)=>ctx.lineTo(x,mh1[i]));
+  ctx.closePath(); ctx.fill();
+
+  const mts2 = [0,80,160,240,310,380,450,520,590,640];
+  const mh2  = [CH,345,325,355,315,340,330,355,335,CH];
+  ctx.fillStyle='#100630';
+  ctx.beginPath(); ctx.moveTo(0,CH);
+  mts2.forEach((x,i)=>ctx.lineTo(x,mh2[i]));
+  ctx.closePath(); ctx.fill();
+
+  // ── 星 ──
+  for (let i=0;i<140;i++) {
+    const sx=(i*173.7+40)%CW, sy=(i*97.3+15)%(CH*0.72);
+    const tw=Math.sin(t*(0.8+i%5*0.3)+i*0.7)*0.5+0.5;
+    ctx.fillStyle=`rgba(255,255,255,${(i%8===0?0.9:0.3+tw*0.5)*(i%20===0?1:0.7)})`;
+    ctx.fillRect(sx,sy,i%15===0?2:1,i%15===0?2:1);
+  }
+
+  // ── 流れ星（8秒周期）──
+  const sc=(t%8)/8;
+  if (sc<0.15) {
+    const p=sc/0.15;
+    const trail=ctx.createLinearGradient(80+p*350-70,50+p*140-35, 80+p*350,50+p*140);
+    trail.addColorStop(0,'rgba(255,255,220,0)');
+    trail.addColorStop(1,`rgba(255,255,220,${(1-p)*0.9})`);
+    ctx.strokeStyle=trail; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(80+p*350-70,50+p*140-35); ctx.lineTo(80+p*350,50+p*140); ctx.stroke();
+    ctx.fillStyle=`rgba(255,255,200,${1-p})`; ctx.fillRect(80+p*350-1,50+p*140-1,3,3);
+  }
+
+  // ── 浮遊パーティクル（魔法感） ──
+  for (let i=0;i<24;i++) {
+    const px2=(i*89.3+t*22*(0.6+i%4*0.4))%CW;
+    const py2=CH-((t*28*(0.4+i*0.08)+i*55)%(CH*1.1));
+    if (py2<0||py2>CH) continue;
+    const a=Math.min(1,Math.min(py2/60,(CH-py2)/60));
+    const c=i%3===0?`rgba(0,212,170,${a*0.8})`:i%3===1?`rgba(255,140,64,${a*0.65})`:`rgba(200,140,255,${a*0.75})`;
+    ctx.fillStyle=c; ctx.fillRect(Math.round(px2),Math.round(py2),1+(i%5===0?1:0),1+(i%5===0?1:0));
+  }
+
+  // ── 地面 ──
+  const grd=ctx.createLinearGradient(0,405,0,CH);
+  grd.addColorStop(0,'#1a4010'); grd.addColorStop(1,'#0a1e06');
+  ctx.fillStyle=grd;
+  ctx.beginPath(); ctx.moveTo(0,412);
+  for (let x=0;x<=CW;x+=16) ctx.lineTo(x,412+Math.sin(x*0.05)*3+Math.sin(x*0.13)*2);
+  ctx.lineTo(CW,CH); ctx.lineTo(0,CH); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='rgba(70,200,50,0.35)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,412);
+  for (let x=0;x<=CW;x+=16) ctx.lineTo(x,412+Math.sin(x*0.05)*3+Math.sin(x*0.13)*2);
+  ctx.stroke();
+
+  // ── 大剣シルエット ──
+  const sw=CW/2, pulse=Math.sin(t*1.2)*0.15+0.85;
+
+  // 後光
+  const swg=ctx.createRadialGradient(sw,185,10,sw,185,170);
+  swg.addColorStop(0,`rgba(0,212,170,${0.2*pulse})`);
+  swg.addColorStop(0.55,`rgba(0,80,60,${0.08*pulse})`);
+  swg.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=swg; ctx.beginPath(); ctx.ellipse(sw,185,160,210,0,0,Math.PI*2); ctx.fill();
+
+  ctx.save(); ctx.translate(sw,0);
+
+  // 刃（テーパー）
+  ctx.fillStyle='rgba(15,45,40,0.78)';
+  ctx.beginPath(); ctx.moveTo(0,68); ctx.lineTo(8,228); ctx.lineTo(-8,228); ctx.closePath(); ctx.fill();
+  // 刃・中央リッジ光沢
+  ctx.strokeStyle=`rgba(0,212,170,${0.55*pulse})`; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(0,72); ctx.lineTo(0,225); ctx.stroke();
+  // 刃・右エッジ
+  ctx.strokeStyle=`rgba(120,220,200,${0.22*pulse})`; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(2,78); ctx.lineTo(7,225); ctx.stroke();
+
+  // 鍔（クロスガード）
+  ctx.fillStyle='rgba(25,65,52,0.88)';
+  ctx.beginPath();
+  ctx.moveTo(-50,222); ctx.quadraticCurveTo(-55,232,-44,235);
+  ctx.lineTo(44,235); ctx.quadraticCurveTo(55,232,50,222);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle=`rgba(0,212,170,${0.4*pulse})`; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(-48,223); ctx.lineTo(48,223); ctx.stroke();
+  // 鍔先端の宝玉
+  [[-46,228],[46,228]].forEach(([gx,gy])=>{
+    ctx.fillStyle=`rgba(0,212,170,${0.65*pulse})`;
+    ctx.beginPath(); ctx.arc(gx,gy,5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(180,255,240,${0.4*pulse})`;
+    ctx.beginPath(); ctx.arc(gx,gy,2.5,0,Math.PI*2); ctx.fill();
+  });
+
+  // グリップ
+  ctx.fillStyle='rgba(30,15,8,0.92)'; ctx.fillRect(-6,235,12,58);
+  for (let i=0;i<5;i++) {
+    ctx.fillStyle='rgba(180,130,55,0.38)'; ctx.fillRect(-6,240+i*9,12,5);
+  }
+
+  // ポンメル
+  ctx.fillStyle='rgba(25,65,52,0.88)';
+  ctx.beginPath(); ctx.arc(0,298,15,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=`rgba(0,212,170,${0.7*pulse})`;
+  ctx.beginPath(); ctx.arc(0,298,8,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=`rgba(200,255,245,${0.5*pulse})`;
+  ctx.beginPath(); ctx.arc(0,298,3.5,0,Math.PI*2); ctx.fill();
+
+  ctx.restore();
+
+  // ── キャラクター ──
+  const bob=Math.sin(t*2)*3;
+
+  // エデニー
+  ctx.fillStyle='rgba(255,140,64,0.15)';
+  ctx.beginPath(); ctx.ellipse(105,412+bob,38,9,0,0,Math.PI*2); ctx.fill();
+  ctx.save(); ctx.translate(105,408+bob); ctx.scale(3,3);
+  drawChar(-12,-30,3,'#c8763a','#ff8c40',t*25);
+  ctx.restore();
+  ctx.textAlign='center';
+  ctx.shadowColor='#ff8c40'; ctx.shadowBlur=8;
+  ctx.fillStyle='#ff8c40'; ctx.font='bold 11px "Courier New"';
+  ctx.fillText('Edeny',105,430+bob);
+
+  // クラナ
+  ctx.fillStyle='rgba(153,102,255,0.15)';
+  ctx.beginPath(); ctx.ellipse(535,412-bob,38,9,0,0,Math.PI*2); ctx.fill();
+  ctx.save(); ctx.translate(535,408-bob); ctx.scale(3,3);
+  drawChar(-12,-30,2,'#bb88ff','#44aacc',t*25+3);
+  ctx.restore();
+  // クラナの周囲に魔法の輝き
+  for (let i=0;i<6;i++) {
+    const ang=t*1.8+i*1.05, r=32+Math.sin(t*2.5+i)*10;
+    const spx=535+Math.cos(ang)*r, spy=(408-bob)-10+Math.sin(ang)*r*0.45;
+    const sa=Math.sin(t*3+i*1.5)*0.5+0.5;
+    ctx.fillStyle=`rgba(200,160,255,${sa*0.85})`;
+    ctx.fillRect(Math.round(spx)-1,Math.round(spy)-1,3,3);
+  }
+  ctx.shadowColor='#bb88ff'; ctx.shadowBlur=8;
+  ctx.fillStyle='#bb88ff'; ctx.font='bold 11px "Courier New"';
+  ctx.fillText('Clana',535,430-bob);
+  ctx.shadowBlur=0;
+
+  // ── タイトル文字 ──
+  const glow=20+Math.sin(t*1.5)*6;
+  ctx.shadowColor='#00d4aa'; ctx.shadowBlur=glow;
+  ctx.fillStyle='#00d4aa'; ctx.font='bold 54px "Courier New"'; ctx.fillText('Edeny',CW/2,195);
+  ctx.shadowColor='#ff8c40'; ctx.shadowBlur=glow;
+  ctx.fillStyle='#ff8c40'; ctx.font='bold 46px "Courier New"'; ctx.fillText('Arcadia',CW/2,252);
+  ctx.shadowBlur=0;
+  ctx.fillStyle=`rgba(180,220,200,${0.55+Math.sin(t)*0.2})`;
+  ctx.font='13px "Courier New"'; ctx.fillText('〜のっぱらに楽園を〜',CW/2,278);
+
+  // ── PRESS ANY KEY ──
+  if (Math.floor(now/520)%2===0) {
+    ctx.fillStyle='rgba(180,200,220,0.8)'; ctx.font='13px "Courier New"';
+    ctx.fillText('PRESS  ANY  KEY',CW/2,356);
+  }
+  ctx.textAlign='left';
+}
+
+// ─── HUD ──────────────────────────────────────────────────────────────────────
+function drawHud() {
+  const loc = player.ty<6?'🏘️ 村': player.ty<14?'🌲 森の道':'🌿 のっぱら';
+  ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(8,8,150,26);
+  ctx.fillStyle='#00d4aa'; ctx.font='13px "Courier New"'; ctx.fillText(loc,14,26);
+  ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(CW-130,8,122,26);
+  ctx.fillStyle='#ffd700'; ctx.fillText(`💰 ${gold} G`,CW-122,26);
+  if (gameState==='walking') {
+    const hoff=[[0,-1],[0,1],[-1,0],[1,0]][player.dir];
+    for (const npc of NPCS) {
+      if (player.tx+hoff[0]===npc.tx && player.ty+hoff[1]===npc.ty) {
+        ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(CW/2-90,CH-52,180,28);
+        ctx.fillStyle='#ffdd44'; ctx.font='12px "Courier New"';
+        ctx.textAlign='center'; ctx.fillText('[SPACE] 話しかける',CW/2,CH-34); ctx.textAlign='left';
+      }
+    }
+    // インタラクト可能タイルのヒント
+    const off=[[0,-1],[0,1],[-1,0],[1,0]][player.dir];
+    const ftx=player.tx+off[0], fty=player.ty+off[1];
+    if (ftx>=0&&ftx<MCOLS&&fty>=0&&fty<MROWS) {
+      const t=MAP[fty][ftx];
+      if (t===T.CHEST||t===T.POT||t===T.SIGN) {
+        const label=t===T.CHEST?'宝箱を開ける':t===T.POT?'ツボを割る':'看板を読む';
+        ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(CW/2-100,CH-52,200,28);
+        ctx.fillStyle='#ffdd44'; ctx.font='12px "Courier New"';
+        ctx.textAlign='center'; ctx.fillText(`[SPACE] ${label}`,CW/2,CH-34); ctx.textAlign='left';
+      }
+    }
+  }
+}
+
+// ─── Battle scene ─────────────────────────────────────────────────────────────
+function drawBattle() {
+  // bg
+  const bg=ctx.createLinearGradient(0,0,0,CH);
+  bg.addColorStop(0,'#0a0020'); bg.addColorStop(1,'#1a0040');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,CW,CH);
+  // stars
+  for (let i=0;i<60;i++) {
+    ctx.fillStyle=`rgba(180,150,255,${0.2+i%3*0.15})`;
+    ctx.fillRect((i*173)%CW,(i*97)%(CH*0.7),1,1);
+  }
+  // Boss name & HP
+  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(20,20,CW-40,44);
+  ctx.strokeStyle='#440088'; ctx.lineWidth=1; ctx.strokeRect(20,20,CW-40,44);
+  ctx.fillStyle='#cc66ff'; ctx.font='bold 16px "Courier New"';
+  ctx.textAlign='left'; ctx.fillText('??? 謎の影',32,42);
+  drawHpBar(220,28,CW-260,16, bt.enemyHp, bt.enemyMaxHp, '');
+  ctx.fillStyle='#aa88cc'; ctx.font='12px "Courier New"';
+  ctx.textAlign='right'; ctx.fillText(`${bt.enemyHp}/${bt.enemyMaxHp}`,CW-28,42); ctx.textAlign='left';
+
+  // Boss character
+  drawBoss(bt.flashEnemy);
+
+  // player area
+  ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(20,272,CW-40,58);
+  ctx.strokeStyle='#003366'; ctx.lineWidth=1; ctx.strokeRect(20,272,CW-40,58);
+  drawChar(38,240,0,'#c8763a','#ff8c40'); // Edeny (small, facing up)
+  drawChar(84,240,0,'#9966ff','#44aacc'); // Clona
+  drawHpBar(130,282,200,16, bt.playerHp, bt.playerMaxHp, 'EDENY HP');
+  ctx.fillStyle='#9966ff'; ctx.font='12px "Courier New"';
+  ctx.fillText('CLANA  魔法: 準備完了',130,316);
+
+  // command area
+  ctx.fillStyle='rgba(0,0,10,0.9)'; ctx.fillRect(20,340,CW-40,130);
+  ctx.strokeStyle='#00d4aa'; ctx.lineWidth=2; ctx.strokeRect(20,340,CW-40,130);
+
+  if (bt.phase === 'victory_dialog') {
+    // 勝利ダイアログ
+    const vl = bt.victoryLines[bt.victoryIdx];
+    if (vl) {
+      if (vl.speaker) {
+        ctx.fillStyle=vl.col; ctx.fillRect(20,310,190,30);
+        ctx.fillStyle='#fff'; ctx.font='bold 14px "Courier New"'; ctx.fillText(vl.speaker,32,330);
+      }
+      ctx.fillStyle='#e0e8f0'; ctx.font='14px "Noto Sans JP","Courier New",sans-serif';
+      const shown=vl.text.slice(0,Math.floor(bt.victoryProg));
+      let lines=[],cur='';
+      for (const ch of shown) {
+        if (ctx.measureText(cur+ch).width>CW-80) { lines.push(cur); cur=ch; } else cur+=ch;
+      }
+      if (cur) lines.push(cur);
+      lines.forEach((l,i)=>ctx.fillText(l,34,368+i*28));
+      if (Math.floor(bt.victoryProg)>=vl.text.length&&Math.floor(Date.now()/450)%2===0) {
+        ctx.fillStyle='#00d4aa'; ctx.fillText('▼',CW-40,456);
+      }
+    }
+  } else {
+    // コマンド表示
+    ctx.fillStyle='#aabbcc'; ctx.font='13px "Courier New"'; ctx.fillText(bt.log, 34, 364);
+    const cmds = ['⚔️  攻撃', '✨ クラナの魔法'];
+    const active = bt.phase==='player_select';
+    cmds.forEach((cmd,i) => {
+      const cx=50+i*290, cy=400;
+      ctx.fillStyle = active ? (bt.cursor===i?'rgba(0,212,170,0.15)':'rgba(255,255,255,0.05)') : 'rgba(80,80,80,0.1)';
+      ctx.fillRect(cx-10,cy-22,260,36);
+      if (active && bt.cursor===i) {
+        ctx.strokeStyle='#00d4aa'; ctx.lineWidth=2; ctx.strokeRect(cx-10,cy-22,260,36);
+        ctx.fillStyle='#00d4aa'; ctx.font='16px monospace'; ctx.fillText('▶',cx-22,cy+2);
+      }
+      ctx.fillStyle = active ? '#fff' : '#666';
+      ctx.font=`${active?'bold ':''}15px "Courier New"`;
+      ctx.fillText(cmd, cx, cy+2);
+    });
+    if (active) {
+      ctx.fillStyle='#556070'; ctx.font='11px "Courier New"';
+      ctx.textAlign='center'; ctx.fillText('←→ で選択　SPACE で決定',CW/2,456); ctx.textAlign='left';
+    }
+  }
+}
+
+// ─── Complete screen ──────────────────────────────────────────────────────────
+function drawComplete() {
+  ctx.fillStyle='#050810'; ctx.fillRect(0,0,CW,CH);
+  for (let i=0;i<120;i++) {
+    ctx.fillStyle=`rgba(255,255,255,${(Math.sin(Date.now()*0.0008+i)*0.3+0.5)*(i%5<1?0.8:0.3)})`;
+    ctx.fillRect((i*173)%CW,(i*97)%CH,i%11===0?2:1,i%11===0?2:1);
+  }
+  ctx.textAlign='center';
+  ctx.fillStyle='rgba(0,212,170,0.15)'; ctx.fillRect(CW/2-220,CH/2-80,440,160);
+  ctx.strokeStyle='rgba(0,212,170,0.5)'; ctx.lineWidth=1; ctx.strokeRect(CW/2-220,CH/2-80,440,160);
+  ctx.shadowColor='#00d4aa'; ctx.shadowBlur=20;
+  ctx.fillStyle='#00d4aa'; ctx.font='bold 28px "Courier New"'; ctx.fillText('TO BE CONTINUED...',CW/2,CH/2-30);
+  ctx.shadowBlur=0;
+  ctx.fillStyle='rgba(180,180,220,0.8)'; ctx.font='14px "Courier New"';
+  ctx.fillText('〜楽園への道はまだ続く〜',CW/2,CH/2+10);
+  ctx.fillStyle='#556070'; ctx.font='12px "Courier New"';
+  ctx.fillText(`最終獲得ゴールド: ${gold} G`,CW/2,CH/2+44);
+  if (Math.floor(Date.now()/500)%2===0) {
+    ctx.fillStyle='#aaa'; ctx.font='13px "Courier New"';
+    ctx.fillText('PRESS ANY KEY',CW/2,CH/2+90);
+  }
+  ctx.textAlign='left'; ctx.shadowBlur=0;
+}
+
+// ─── Gamepad ──────────────────────────────────────────────────────────────────
+let prevGpA=false, prevGpLeft=false, prevGpRight=false;
+function pollGamepad() {
+  const gp=Array.from(navigator.getGamepads()).find(g=>g);
+  if (!gp) return;
+  const D=0.4;
+  keys['ArrowUp']   =gp.buttons[12]?.pressed||gp.axes[1]<-D;
+  keys['ArrowDown'] =gp.buttons[13]?.pressed||gp.axes[1]>D;
+  keys['ArrowLeft'] =gp.buttons[14]?.pressed||gp.axes[0]<-D;
+  keys['ArrowRight']=gp.buttons[15]?.pressed||gp.axes[0]>D;
+  if (gp.buttons[0]?.pressed&&!prevGpA)     justPressed['Space']=true;
+  if (gp.buttons[14]?.pressed&&!prevGpLeft) justPressed['ArrowLeft']=true;
+  if (gp.buttons[15]?.pressed&&!prevGpRight)justPressed['ArrowRight']=true;
+  prevGpA=gp.buttons[0]?.pressed;
+  prevGpLeft=gp.buttons[14]?.pressed; prevGpRight=gp.buttons[15]?.pressed;
+}
+
+// ─── Main update ──────────────────────────────────────────────────────────────
+const INTRO = [
+  {speaker:'CLANA', col:'#9966ff', text:'エデニー、ここが「のっぱら」です。本当にここに楽園を作るんですか？'},
+  {speaker:'EDENY', col:'#ff8c40', text:'そや。まずは資金集めや。北の村に行って使えるもんを全部いただく。'},
+  {speaker:'CLANA', col:'#9966ff', text:'……それ、タンスをあさるってことですよね？'},
+  {speaker:'EDENY', col:'#ff8c40', text:'当たり前やろ。さっさと行くで。上キーで北に歩けるで。'},
+  {speaker:'CLANA', col:'#9966ff', text:'（ため息）……わかりました。参りましょう。方位磁針、持ってきてよかった。'},
+];
+
+function update() {
+  pollGamepad();
+  smoothStep(player); smoothStep(clona);
+  updateCamera();
+  updateFade();
+  updateShake();
+  updateParticles();
+  handleMovement();
+  if (gameState==='battle') updateBattle();
+
+  const confirm = justPressed['Space']||justPressed['Enter']||justPressed['KeyZ'];
+  if (confirm) {
+    if      (gameState==='title')    { getAudio(); runScript(INTRO, ()=>startBgm('field')); }
+    else if (gameState==='script')   { advanceScript(); }
+    else if (gameState==='walking')  { checkInteract(); }
+    else if (gameState==='complete') { resetGame(); }
+  }
+  justPressed={};
+}
+
+// ─── Main draw ────────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0,0,CW,CH);
+  const [sx,sy] = shakeOffset();
+  ctx.save();
+  ctx.translate(sx, sy);
+  if (gameState==='title') {
+    drawTitle();
+  } else if (gameState==='complete') {
+    drawComplete();
+  } else if (gameState==='battle') {
+    drawBattle();
+  } else {
+    // map scene (walking / script)
+    drawMap();
+    for (const npc of NPCS)
+      drawChar(npc.tx*TS-camX-8, npc.ty*TS-camY-16, npc.dir, npc.hairCol, npc.bodyCol, Date.now()*0.025+npc.tx);
+    drawChar(clona.dx-camX-8, clona.dy-camY-16, clona.dir, '#9966ff','#44aacc', clona.anim);
+    drawChar(player.dx-camX-8, player.dy-camY-16, player.dir,'#c8763a','#ff8c40', player.anim);
+    drawHud();
+    drawParticles();
+    if (gameState==='script'&&script) {
+      const line=script.lines[scriptIdx];
+      const prev=Math.floor(scriptProg);
+      scriptProg=Math.min(scriptProg+1.6, line.text.length);
+      if (Math.floor(scriptProg) > prev && Math.floor(scriptProg) < line.text.length) seDialogTick();
+      drawDlgBox(line, scriptProg);
+    }
+  }
+  ctx.restore();
+  // fade overlay（シェイクの外側で描く）
+  if (fadeAlpha>0) {
+    ctx.fillStyle=`rgba(0,0,0,${fadeAlpha})`; ctx.fillRect(0,0,CW,CH);
+  }
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+loop();
+</script>
+</body>
+</html>
